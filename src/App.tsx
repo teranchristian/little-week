@@ -8,7 +8,7 @@ import {
 import { defaultAnimateLayoutChanges, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
-  days, findActivity, icons, moveActivity, newActivityId, parts, people, personIds, readHideWords, readWeek,
+  days, familyIcon, findActivity, icons, moveActivity, newActivityId, parts, people, personIds, previousFamilyIcon, readHideWords, readWeek,
   sampleWeek, storageKey, wordsStorageKey,
   type Activity, type ActivityDestination, type ActivityPosition, type PartId, type PersonId, type WeekPlan,
 } from './planner';
@@ -25,7 +25,7 @@ function Face({ id }: { id: PersonId }) {
 function Participants({ who }: { who: PersonId[] }) {
   const everyone = personIds.every(id => who.includes(id));
   return <span className="people">
-    {everyone ? <span className="all-people" title="Everyone" aria-label="Everyone"><span className="all-icon" aria-hidden="true">👨‍👩‍👧‍👦</span><span className="all-label">All</span></span> : who.map(id => <Face key={id} id={id} />)}
+    {everyone ? <span className="all-people" title="Everyone" aria-label="Everyone"><IconPicture emoji={familyIcon} className="all-icon" /><span className="all-label">All</span></span> : who.map(id => <Face key={id} id={id} />)}
   </span>;
 }
 
@@ -45,6 +45,10 @@ function ActivityContent({ activity }: { activity: Activity }) {
 }
 
 function IconPicture({ emoji, className }: { emoji: string; className: string }) {
+  const isFamily = emoji === familyIcon || emoji === previousFamilyIcon;
+  if (isFamily) return <span className={`${className} family-picture`} aria-hidden="true">
+    {personIds.map(id => <span key={id} className={`family-picture-face ${id}`}>{people[id].emoji}</span>)}
+  </span>;
   const url = openMojiUrl(emoji);
   return <span className={className} aria-hidden="true">{url ? <img src={url} alt="" /> : emoji}</span>;
 }

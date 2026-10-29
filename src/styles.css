@@ -128,7 +128,10 @@ dialog{border:0;border-radius:19px;box-shadow:0 24px 75px #183b3450;width:min(51
   .calendar{grid-template-rows:9mm repeat(3,61mm)}
 }
 
-.activity-emoji img,.choice .big img{display:block;width:1em;height:1em;object-fit:contain}
+.activity-emoji img,.choice .big img,.all-icon img{display:block;width:1em;height:1em;object-fit:contain}
+.family-picture{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:1px;place-items:center;width:1em;min-width:1em;height:1em;min-height:1em;padding:.04em;border-radius:.18em;background:#fff0b8;line-height:1}
+.family-picture-face{display:grid;place-items:center;width:100%;height:100%;border-radius:50%;font-size:.42em;line-height:1}
+.family-picture-face.dad{background:#d5ede5}.family-picture-face.mum{background:#ffe2eb}.family-picture-face.ema{background:#e6dcfd}.family-picture-face.haru{background:#fff0cd}
 .icon-search{margin:0 0 10px}
 .emoji-picker{grid-template-columns:repeat(3,minmax(0,1fr));max-height:340px;overflow-y:auto;padding:2px}
 .choice{min-height:88px;font-size:12px;padding:8px 4px;text-align:center;line-height:1.2}

@@ -15,13 +15,16 @@ export const parts = [
 ] as const;
 export type PartId = typeof parts[number]['id'];
 
+export const familyIcon = '👨‍👩‍👧‍👦';
+export const previousFamilyIcon = '🧑‍🧑‍🧒‍🧒';
+
 export const icons = [
   ['🏫', 'Daycare'], ['💻', 'Work'], ['🏥', 'Nurse work'], ['🏠', 'Home'],
   ['🛝', 'Playground'], ['🌳', 'Park'], ['👫', 'Friends'], ['🏊', 'Swimming'],
   ['📖', 'Stories'], ['🍽️', 'Dinner'], ['🚗', 'Outing'], ['🎨', 'Art'],
   ['🧸', 'Play'], ['🛒', 'Shopping'], ['🩺', 'Doctor'], ['🎂', 'Birthday'],
   ['⚽', 'Sport'], ['🎵', 'Music'], ['🍿', 'Movie'], ['😴', 'Nap'],
-  ['📚', 'Library'], ['🏖️', 'Beach'], ['🍦', 'Treat'], ['👨‍👩‍👧‍👦', 'Family'],
+  ['📚', 'Library'], ['🏖️', 'Beach'], ['🍦', 'Treat'], [familyIcon, 'Family'],
 ] as const;
 
 export interface Activity {

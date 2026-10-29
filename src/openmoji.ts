@@ -1,4 +1,5 @@
 import catalog from './openmoji-catalog.json';
+import { familyIcon, previousFamilyIcon } from './planner';
 
 export interface OpenMojiIcon {
   emoji: string;
@@ -11,6 +12,8 @@ export interface OpenMojiIcon {
 export const openMojiIcons = catalog as OpenMojiIcon[];
 const normalize = (emoji: string) => emoji.replaceAll('\uFE0F', '');
 const byEmoji = new Map(openMojiIcons.map(icon => [normalize(icon.emoji), icon]));
+const family = byEmoji.get(normalize(familyIcon));
+if (family) byEmoji.set(normalize(previousFamilyIcon), family);
 
 export function findOpenMoji(emoji: string): OpenMojiIcon | undefined {
   return byEmoji.get(normalize(emoji));
@@ -39,5 +42,6 @@ export function searchOpenMoji(query: string): OpenMojiIcon[] {
     .filter((result): result is { icon: OpenMojiIcon; score: number } => result !== null)
     .sort((a, b) => b.score - a.score || a.icon.name.localeCompare(b.icon.name))
     .slice(0, 60)
-    .map(result => result.icon);
+    .map(result => result.icon.emoji === previousFamilyIcon && family ? family : result.icon)
+    .filter((icon, index, results) => results.findIndex(result => result.hexcode === icon.hexcode) === index);
 }
