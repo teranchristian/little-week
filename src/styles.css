@@ -15,8 +15,8 @@ dialog{border:0;border-radius:19px;box-shadow:0 24px 75px #183b3450;width:min(51
 .all-people{display:inline-flex;align-items:center;justify-content:center;gap:3px;white-space:nowrap;font-size:11px;font-weight:800;color:#45524b}
 .all-icon{font-size:19px;line-height:1}
 .hide-words .all-label{display:none}
-.calendar{grid-template-rows:48px repeat(3,minmax(258px,1fr))}
-.part{height:auto;min-height:258px}
+.calendar{grid-template-rows:48px repeat(3,max-content)}
+.part{height:auto;min-height:0}
 .activities{flex:1 0 auto;min-height:auto;overflow:visible}
 .activities>.activity{flex:1 0 auto;min-height:42px}
 .activity{cursor:grab;user-select:none;-webkit-user-select:none;touch-action:manipulation}
@@ -45,13 +45,13 @@ dialog{border:0;border-radius:19px;box-shadow:0 24px 75px #183b3450;width:min(51
   .calendar{grid-template-columns:repeat(7,minmax(0,1fr));min-width:1274px}
   .activities{flex:1 0 auto;min-height:auto}
   .activities>.activity{flex:1 0 150px;min-height:150px}
-  .activity{display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:6px;padding:10px 7px}
-  .hide-words .activity{justify-content:flex-start}
+  .activity{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:6px;padding:10px 7px}
+  .hide-words .activity{justify-content:center}
   .activity-emoji{display:grid;place-items:center;width:64px;min-width:64px;height:64px;min-height:64px;font-size:52px;align-self:center}
   .hide-words .activity-emoji{font-size:52px}
-  .activity-details{align-items:flex-start;align-self:center;text-align:left}
+  .activity-details{align-items:center;align-self:center;text-align:center}
   .activity-name{font-size:14px}
-  .people{justify-content:flex-start}
+  .people{justify-content:center}
   .people .face,.activities>.activity:only-child .people .face{width:34px;height:34px;font-size:26px}
   .hide-words .people .face{width:34px;height:34px;font-size:26px}
   .all-people{font-size:14px}

@@ -373,7 +373,7 @@ export default function App() {
     <Legend />
     <div className="intro">Tap an activity to edit it. Drag it to another spot to move it (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
     <Calendar week={week} onEdit={setTarget} onCommit={commitMove} />
-    <p className="smallnote">All three time-of-day rows are the same height · Example activities only · Changes save on this device · A4 landscape print</p>
+    <p className="smallnote">Each time-of-day row fits its activities · Example activities only · Changes save on this device · A4 landscape print</p>
     {showBackToTop && <button className="back-to-top" type="button" aria-label="Back to top" title="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })}><span aria-hidden="true">↑</span></button>}
     {target && initialActivity && <ActivityEditor target={target} activity={initialActivity} week={week} onSave={saveActivity} onDelete={deleteActivity} onClose={() => setTarget(null)} />}
     {undoMove && <MoveToast message={undoMove.message} onUndo={() => { setWeek(undoMove.before); setUndoMove(null); }} onDismiss={() => setUndoMove(null)} />}
