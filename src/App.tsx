@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   closestCenter, DndContext, DragOverlay, KeyboardSensor, MouseSensor,
@@ -8,30 +8,35 @@ import {
 import { defaultAnimateLayoutChanges, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
-  days, familyIcon, findActivity, icons, moveActivity, newActivityId, parts, people, personIds, previousFamilyIcon, readHideWords, readWeek,
-  sampleWeek, storageKey, wordsStorageKey,
-  type Activity, type ActivityDestination, type ActivityPosition, type PartId, type PersonId, type WeekPlan,
+  days, defaultFamily, familyIcon, familyStorageKey, findActivity, icons, moveActivity, newActivityId, newPersonId, parts, previousFamilyIcon, readFamily, readHideWords, readWeek,
+  sampleWeekForFamily, storageKey, wordsStorageKey,
+  type Activity, type ActivityDestination, type ActivityPosition, type Family, type PartId, type PersonId, type WeekPlan,
 } from './planner';
 import { findOpenMoji, openMojiUrl, searchOpenMoji, type OpenMojiIcon } from './openmoji';
 
 interface EditTarget { day: number; part: PartId; index: number | null }
 interface UndoMove { token: number; before: WeekPlan; message: string }
+const FamilyContext = createContext<Family>(defaultFamily);
 
 function Face({ id }: { id: PersonId }) {
-  const person = people[id];
-  return <span className={`face ${id}`} title={person.name} aria-label={person.name}>{person.emoji}</span>;
+  const members = useContext(FamilyContext).members;
+  const person = members.find(member => member.id === id);
+  if (!person) return null;
+  return <span className={`face face-${members.indexOf(person) % 4}`} title={person.name} aria-label={person.name}>{person.emoji}</span>;
 }
 
 function Participants({ who }: { who: PersonId[] }) {
-  const everyone = personIds.every(id => who.includes(id));
+  const members = useContext(FamilyContext).members;
+  const everyone = members.length > 1 && members.every(person => who.includes(person.id));
   return <span className="people">
     {everyone ? <span className="all-people" title="Everyone" aria-label="Everyone"><IconPicture emoji={familyIcon} className="all-icon" /><span className="all-label">All</span></span> : who.map(id => <Face key={id} id={id} />)}
   </span>;
 }
 
 function Legend() {
+  const members = useContext(FamilyContext).members;
   return <div className="legend"><span className="legendlabel">Who's who:</span>
-    {personIds.map(id => <span className="legend-person" key={id}><Face id={id} /> {people[id].name}</span>)}
+    {members.map(person => <span className="legend-person" key={person.id}><Face id={person.id} /> {person.name}</span>)}
   </div>;
 }
 
@@ -45,9 +50,11 @@ function ActivityContent({ activity }: { activity: Activity }) {
 }
 
 function IconPicture({ emoji, className }: { emoji: string; className: string }) {
+  const members = useContext(FamilyContext).members;
   const isFamily = emoji === familyIcon || emoji === previousFamilyIcon;
-  if (isFamily) return <span className={`${className} family-picture`} aria-hidden="true">
-    {personIds.map(id => <span key={id} className={`family-picture-face ${id}`}>{people[id].emoji}</span>)}
+  const columns = Math.ceil(Math.sqrt(members.length));
+  if (isFamily) return <span className={`${className} family-picture`} aria-hidden="true" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${Math.ceil(members.length / columns)}, minmax(0, 1fr))` }}>
+    {members.map(person => <span key={person.id} className="family-picture-face" style={{ fontSize: `${Math.min(.42, .8 / columns)}em` }}>{person.emoji}</span>)}
   </span>;
   const url = openMojiUrl(emoji);
   return <span className={className} aria-hidden="true">{url ? <img src={url} alt="" /> : emoji}</span>;
@@ -231,6 +238,7 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose }: {
   onSave: (activity: Activity, destination: ActivityDestination) => void;
   onDelete: () => void; onClose: () => void;
 }) {
+  const members = useContext(FamilyContext).members;
   const dialog = useRef<HTMLDialogElement>(null);
   const iconSearch = useRef<HTMLInputElement>(null);
   const [icon, setIcon] = useState(activity.icon);
@@ -277,7 +285,7 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose }: {
   function togglePerson(id: PersonId) {
     setWho(current => current.includes(id)
       ? current.filter(person => person !== id)
-      : personIds.filter(person => current.includes(person) || person === id));
+      : members.map(person => person.id).filter(person => current.includes(person) || person === id));
   }
 
   function save() {
@@ -310,8 +318,8 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose }: {
       <label htmlFor="activityName" className="hint">Short label (optional for printing)</label>
       <input id="activityName" className="mini-input" maxLength={25} value={label} onChange={event => setLabel(event.target.value)} />
       <div className="section-title person-section-title">2. Who is doing it?</div>
-      <div className="person-grid">{personIds.map(id => <button key={id} type="button" className={`person-choice ${who.includes(id) ? 'selected' : ''}`} aria-pressed={who.includes(id)} onClick={() => togglePerson(id)}>
-        <Face id={id} />{people[id].name}
+      <div className="person-grid">{members.map(person => <button key={person.id} type="button" className={`person-choice ${who.includes(person.id) ? 'selected' : ''}`} aria-pressed={who.includes(person.id)} onClick={() => togglePerson(person.id)}>
+        <Face id={person.id} />{person.name}
       </button>)}</div>
       <div className="section-title destination-section-title">3. Where does it go?</div>
       <div className="destination-grid">
@@ -348,15 +356,74 @@ function MoveToast({ message, onUndo, onDismiss }: {
   </div>;
 }
 
+function FamilyEditor({ family, week, onSave, onClose }: {
+  family: Family; week: WeekPlan; onSave: (family: Family) => void; onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [draft, setDraft] = useState<Family>(() => structuredClone(family));
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const selected = draft.members.find(member => member.id === selectedId);
+  const usedBy = selected ? [...new Set(week.flatMap(day => parts.flatMap(part =>
+    day[part.id].filter(activity => activity.icon.replaceAll('\uFE0F', '') === selected.emoji.replaceAll('\uFE0F', '')).map(activity => activity.label))))] : [];
+  const suggested = ['👨', '👩', '👧', '👦', '👶', '🧑', '👴', '👵', '🐶', '🐱']
+    .map(emoji => findOpenMoji(emoji)).filter((icon): icon is OpenMojiIcon => Boolean(icon));
+  const choices = query.trim() ? searchOpenMoji(query) : suggested;
+
+  useEffect(() => { dialog.current?.showModal(); }, []);
+
+  function updateMember(id: string, update: Partial<Family['members'][number]>) {
+    setDraft(current => ({ ...current, members: current.members.map(member => member.id === id ? { ...member, ...update } : member) }));
+  }
+
+  function addMember() {
+    const id = newPersonId();
+    setDraft(current => ({ ...current, members: [...current.members, { id, name: '', emoji: '🧑' }] }));
+    setSelectedId(id);
+    setQuery('');
+  }
+
+  return <dialog ref={dialog} aria-labelledby="familyTitle" onClose={onClose}>
+    <div className="modal-head"><h2 id="familyTitle">Customise family</h2><button className="xclose" type="button" onClick={onClose} aria-label="Close">×</button></div>
+    <div className="modal-body">
+      <label className="section-title" htmlFor="familyName">Planner name</label>
+      <input id="familyName" className="mini-input" maxLength={40} value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} placeholder="Our Week" />
+      <div className="section-title person-section-title">Family members</div>
+      <div className="family-members">{draft.members.map(member => <div className="family-member" key={member.id}>
+        <button type="button" className={`member-emoji ${selectedId === member.id ? 'selected' : ''}`} onClick={() => { setSelectedId(member.id); setQuery(''); }} aria-label={`Change emoji for ${member.name || 'new member'}`} aria-pressed={selectedId === member.id}>{member.emoji}</button>
+        <input className="mini-input" maxLength={25} aria-label="Member name" placeholder="Name" value={member.name} onChange={event => updateMember(member.id, { name: event.target.value })} />
+        <button type="button" className="remove-member" aria-label={`Remove ${member.name || 'new member'}`} disabled={draft.members.length === 1} onClick={() => {
+          setDraft(current => ({ ...current, members: current.members.filter(person => person.id !== member.id) }));
+          if (selectedId === member.id) setSelectedId(null);
+        }}>Remove</button>
+      </div>)}</div>
+      <button type="button" className="btn add-member" onClick={addMember}>+ Add member</button>
+      {selected && <section className="member-picker" aria-label={`Choose emoji for ${selected.name || 'new member'}`}>
+        <div className="section-title">Emoji for {selected.name || 'new member'}</div>
+        <input className="mini-input icon-search" type="search" aria-label="Search member emojis" placeholder="Search emojis (e.g. person, cat)" value={query} onChange={event => setQuery(event.target.value)} />
+        <div className="emoji-picker">{choices.map(entry => <button type="button" key={entry.hexcode} className={`choice ${findOpenMoji(selected.emoji)?.hexcode === entry.hexcode ? 'selected' : ''}`} aria-label={entry.name} aria-pressed={findOpenMoji(selected.emoji)?.hexcode === entry.hexcode} onClick={() => updateMember(selected.id, { emoji: entry.emoji })}>
+          <IconPicture emoji={entry.emoji} className="big" /><span>{entry.name}</span>
+        </button>)}</div>
+        {choices.length === 0 && <div className="icon-empty">No emojis found. Try another word.</div>}
+        {usedBy.length > 0 && <p className="emoji-warning" role="alert">⚠️ This emoji is also used for {usedBy.length === 1 ? `the “${usedBy[0]}” activity` : `${usedBy.length} activities (${usedBy.slice(0, 3).join(', ')}${usedBy.length > 3 ? ', …' : ''})`}. It may be confusing on the planner.</p>}
+      </section>}
+    </div>
+    <div className="modal-foot"><button className="btn" type="button" onClick={onClose}>Cancel</button><button className="btn primary" type="button" disabled={!draft.name.trim() || draft.members.some(member => !member.name.trim() || !member.emoji.trim())} onClick={() => onSave({ name: draft.name.trim(), members: draft.members.map(member => ({ ...member, name: member.name.trim() })) })}>Save family ✓</button></div>
+  </dialog>;
+}
+
 export default function App() {
+  const [family, setFamily] = useState<Family>(readFamily);
   const [week, setWeek] = useState<WeekPlan>(readWeek);
   const [hideWords, setHideWords] = useState(readHideWords);
   const [target, setTarget] = useState<EditTarget | null>(null);
+  const [editingFamily, setEditingFamily] = useState(false);
   const [undoMove, setUndoMove] = useState<UndoMove | null>(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const toastToken = useRef(0);
 
   useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify(week)); } catch { /* Private browsing can block storage. */ } }, [week]);
+  useEffect(() => { try { localStorage.setItem(familyStorageKey, JSON.stringify(family)); } catch { /* Private browsing can block storage. */ } }, [family]);
   useEffect(() => { try { localStorage.setItem(wordsStorageKey, String(hideWords)); } catch { /* Private browsing can block storage. */ } }, [hideWords]);
   useEffect(() => {
     if (!undoMove) return;
@@ -424,18 +491,27 @@ export default function App() {
   function reset() {
     if (window.confirm('Restore the sample week? Your edits will be replaced.')) {
       setUndoMove(null);
-      setWeek(structuredClone(sampleWeek));
+      setWeek(sampleWeekForFamily(family));
     }
   }
 
+  function saveFamily(nextFamily: Family) {
+    const memberIds = new Set(nextFamily.members.map(member => member.id));
+    setWeek(current => current.map(day => Object.fromEntries(parts.map(part => [part.id, day[part.id].map(activity =>
+      ({ ...activity, who: activity.who.filter(id => memberIds.has(id)) }))])) as WeekPlan[number]));
+    setFamily(nextFamily);
+    setEditingFamily(false);
+    setUndoMove(null);
+  }
+
   const initialActivity = target && (target.index === null
-    ? { id: newActivityId(), icon: '🛝', label: 'Playground', who: ['ema'] as PersonId[] }
+    ? { id: newActivityId(), icon: '🛝', label: 'Playground', who: family.members[0] ? [family.members[0].id] : [] }
     : week[target.day][target.part][target.index]);
 
-  return <main className={`shell ${hideWords ? 'hide-words' : ''} ${showBackToTop ? 'with-back-to-top' : ''}`}>
+  return <FamilyContext.Provider value={family}><main className={`shell ${hideWords ? 'hide-words' : ''} ${showBackToTop ? 'with-back-to-top' : ''}`}>
     <header className="top">
-      <div className="titleline"><span className="rainbow" aria-hidden="true">🌈</span><div><h1>Our Week</h1><p className="sub">The picture shows <strong>what</strong> we're doing. The little faces show <strong>who</strong> is doing it.</p></div></div>
-      <div className="actions"><button className="btn" type="button" onClick={() => setHideWords(value => !value)}>{hideWords ? '👀 Show words' : '🙈 Hide words'}</button><button className="btn" type="button" onClick={reset}>↺ Reset example</button><button className="btn primary" type="button" onClick={() => window.print()}>🖨️ Print A4</button></div>
+      <div className="titleline"><span className="rainbow" aria-hidden="true">🌈</span><div><h1>{family.name}</h1><p className="sub">The picture shows <strong>what</strong> we're doing. The little faces show <strong>who</strong> is doing it.</p></div></div>
+      <div className="actions"><button className="btn" type="button" onClick={() => setEditingFamily(true)}>👨‍👩‍👧‍👦 Edit family</button><button className="btn" type="button" onClick={() => setHideWords(value => !value)}>{hideWords ? '👀 Show words' : '🙈 Hide words'}</button><button className="btn" type="button" onClick={reset}>↺ Reset example</button><button className="btn primary" type="button" onClick={() => window.print()}>🖨️ Print A4</button></div>
     </header>
     <Legend />
     <div className="intro">Tap an activity to edit it. Drag it to another spot to move it (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
@@ -443,6 +519,7 @@ export default function App() {
     <p className="smallnote">Each time-of-day row fits its activities · Example activities only · Changes save on this device · A4 landscape print · Icons by <a href="https://openmoji.org/">OpenMoji</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>)</p>
     {showBackToTop && <button className="back-to-top" type="button" aria-label="Back to top" title="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })}><span aria-hidden="true">↑</span></button>}
     {target && initialActivity && <ActivityEditor target={target} activity={initialActivity} week={week} onSave={saveActivity} onDelete={deleteActivity} onClose={() => setTarget(null)} />}
+    {editingFamily && <FamilyEditor family={family} week={week} onSave={saveFamily} onClose={() => setEditingFamily(false)} />}
     {undoMove && <MoveToast message={undoMove.message} onUndo={() => { setWeek(undoMove.before); setUndoMove(null); }} onDismiss={() => setUndoMove(null)} />}
-  </main>;
+  </main></FamilyContext.Provider>;
 }
