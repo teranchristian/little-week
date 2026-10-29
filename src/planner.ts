@@ -2,7 +2,7 @@ export interface Person { id: string; name: string; emoji: string }
 export interface Family { name: string; members: Person[] }
 export type PersonId = string;
 export const defaultFamily: Family = {
-  name: 'Our Week',
+  name: 'Little Week',
   members: [
     { id: 'dad', name: 'Dad', emoji: '👨' },
     { id: 'mum', name: 'Mum', emoji: '👩' },
@@ -22,7 +22,7 @@ export function readFamily(): Family {
           member && typeof member.id === 'string' && member.id && typeof member.name === 'string' &&
           member.name.trim() && typeof member.emoji === 'string' && member.emoji.trim()) &&
         new Set(family.members.map(member => member.id)).size === family.members.length) {
-        return { name: family.name, members: family.members };
+        return { name: family.name === 'Our Week' ? defaultFamily.name : family.name, members: family.members };
       }
     }
   } catch { /* Storage can be unavailable or contain older data. */ }

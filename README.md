@@ -1,4 +1,4 @@
-# Our Week
+# Little Week
 
 A picture based weekly planner for young children, built with React, TypeScript, Vite and Tailwind CSS. The layout and print styles come from [`reference/template.html`](reference/template.html).
 
