@@ -231,11 +231,16 @@ function Calendar({ week, displayedDays, onEdit, onCommit }: {
   }
 
   const visibleWeek = preview ?? week;
+  const printRowWeights = parts.map(part => Math.max(0, ...displayedDays.map(({ index }) => visibleWeek[index][part.id].length)) + 0.4);
+  const printRowTotal = printRowWeights.reduce((total, weight) => total + weight, 0);
+  const printRowHeights = Object.fromEntries(parts.map((part, index) =>
+    [`--print-${part.id}-height`, `${(183 * printRowWeights[index] / printRowTotal).toFixed(2)}mm`]
+  ));
   return <section className="scroll" aria-label="Weekly family activities">
     <nav ref={dayNav} className="day-nav" aria-label="Jump to day">
       {displayedDays.map(({ index, label, date }) => <button key={index} type="button" className={activeDay === index ? 'active' : ''} aria-current={activeDay === index ? 'location' : undefined} onClick={() => document.getElementById(`day-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{label}{date && <span className="nav-date">{date.getDate()}</span>}</button>)}
     </nav>
-    <div className={`calendar ${displayedDays.length < 7 ? 'short-view' : ''}`} style={{ '--calendar-columns': displayedDays.length } as CSSProperties}>
+    <div className={`calendar ${displayedDays.length < 7 ? 'short-view' : ''}`} style={{ '--calendar-columns': displayedDays.length, ...printRowHeights } as CSSProperties}>
     <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={dragStart} onDragMove={updatePreview} onDragOver={updatePreview} onDragEnd={dragEnd} onDragCancel={clearDrag}>
       {displayedDays.map(({ index: dayIndex, label, date }) => <article className="day" id={`day-${dayIndex}`} key={dayIndex}>
         <div className="day-head"><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>

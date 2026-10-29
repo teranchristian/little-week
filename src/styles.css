@@ -235,6 +235,7 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
 }
 
 @media print{
+  .calendar{grid-template-rows:9mm var(--print-morning-height,61mm) var(--print-afternoon-height,61mm) var(--print-night-height,61mm)}
   .activity{flex-direction:row;gap:1.5mm;padding:2mm 1mm;align-items:center;justify-content:center}
   .activity-emoji,.activities>.activity:only-child .activity-emoji,
   .hide-words .activity-emoji,.hide-words .activities>.activity:only-child .activity-emoji{
