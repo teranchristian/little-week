@@ -197,14 +197,15 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
 @media screen{
   .activities>.activity{display:flex;flex-direction:row;justify-content:flex-start;align-items:center;min-height:76px;gap:12px;padding:8px 12px}
   .activity-emoji,.activities>.activity:only-child .activity-emoji{display:grid;place-items:center;width:52px;min-width:52px;height:52px;min-height:52px;font-size:48px}
-  .activity-details{align-items:flex-start;align-self:center;text-align:left;gap:4px}
+  .activity-details{align-items:flex-start;align-self:center;justify-content:flex-start;min-height:64px;text-align:left;gap:4px}
   .activity-name{font-size:14px;line-height:1.25}
   .people{justify-content:flex-start}
   .people .face,.activities>.activity:only-child .people .face{width:27px;height:27px;font-size:21px}
   .all-people{font-size:12px}
   .all-icon{font-size:21px}
+  .activity .all-icon{font-size:40px}
   .hide-words .activities>.activity{justify-content:center;min-height:100px}
-  .hide-words .activity-details{flex:0 1 auto;align-items:center}
+  .hide-words .activity-details{flex:0 1 auto;align-items:center;min-height:0}
   .hide-words .people{justify-content:center}
   .hide-words .activity-emoji,.hide-words .activities>.activity:only-child .activity-emoji{width:64px;min-width:64px;height:64px;min-height:64px;font-size:60px}
 }
