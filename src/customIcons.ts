@@ -1,12 +1,12 @@
 export type IconScope = 'activity' | 'family';
 export interface CustomIcon { id: string; name: string; tag: string; image: string; scope: IconScope }
 
-const storageKey = 'our-week-custom-icons-v1';
+export const customIconsStorageKey = 'our-week-custom-icons-v1';
 export const isCustomIcon = (icon: string) => icon.startsWith('custom:');
 
 export function readCustomIcons(): CustomIcon[] {
   try {
-    const saved: unknown = JSON.parse(localStorage.getItem(storageKey) ?? '[]');
+    const saved: unknown = JSON.parse(localStorage.getItem(customIconsStorageKey) ?? '[]');
     return Array.isArray(saved) ? saved.filter((item): item is CustomIcon =>
       item && typeof item.id === 'string' && isCustomIcon(item.id) &&
       typeof item.name === 'string' && typeof item.image === 'string' &&
@@ -18,7 +18,7 @@ export function readCustomIcons(): CustomIcon[] {
 }
 
 export function saveCustomIcons(icons: CustomIcon[]): void {
-  localStorage.setItem(storageKey, JSON.stringify(icons));
+  localStorage.setItem(customIconsStorageKey, JSON.stringify(icons));
 }
 
 export function validateIconFile(file: File): void {

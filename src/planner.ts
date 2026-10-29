@@ -6,8 +6,8 @@ export const defaultFamily: Family = {
   members: [
     { id: 'dad', name: 'Dad', emoji: '👨' },
     { id: 'mum', name: 'Mum', emoji: '👩' },
-    { id: 'ema', name: 'Ema', emoji: '👧' },
-    { id: 'haru', name: 'Haru', emoji: '👶' },
+    { id: 'child-1', name: 'Child 1', emoji: '👧' },
+    { id: 'child-2', name: 'Child 2', emoji: '👶' },
   ],
 };
 export const familyStorageKey = 'our-week-family-v1';
@@ -97,12 +97,12 @@ export function newActivityId(): string {
 const activity = (icon: string, label: string, who: PersonId[]): Activity => ({ id: newActivityId(), icon, label, who });
 const all = defaultFamily.members.map(person => person.id);
 export const sampleWeek: WeekPlan = [
-  { morning: [activity('🏫', 'Daycare', ['ema']), activity('💻', 'Work', ['dad'])], afternoon: [activity('🛝', 'Playground', ['mum', 'ema', 'haru'])], night: [activity('📖', 'Stories', ['dad', 'ema', 'haru'])] },
-  { morning: [activity('🏫', 'Daycare', ['ema', 'haru']), activity('💻', 'Work', ['dad'])], afternoon: [activity('🌳', 'Park', ['mum', 'ema', 'haru'])], night: [activity('🍽️', 'Dinner', all)] },
-  { morning: [activity('🧸', 'Play at home', ['dad', 'ema', 'haru'])], afternoon: [activity('👫', 'Friends', ['ema', 'haru', 'mum'])], night: [activity('📖', 'Stories', ['dad', 'ema', 'haru'])] },
-  { morning: [activity('🏫', 'Daycare', ['ema']), activity('🏥', 'Work', ['mum'])], afternoon: [activity('🏠', 'Home', ['dad', 'ema', 'haru'])], night: [activity('🍽️', 'Dinner', all)] },
-  { morning: [activity('🏫', 'Daycare', ['ema']), activity('💻', 'Work', ['dad'])], afternoon: [activity('🏊', 'Swim', ['ema', 'dad'])], night: [activity('🍿', 'Movie', all)] },
-  { morning: [activity('🛒', 'Shopping', ['dad', 'haru'])], afternoon: [activity('🛝', 'Playground', all)], night: [activity('🎵', 'Music', all)] },
+  { morning: [activity('🏫', 'Daycare', ['child-1']), activity('💻', 'Work', ['dad'])], afternoon: [activity('🛝', 'Playground', ['mum', 'child-1', 'child-2'])], night: [activity('📖', 'Stories', ['dad', 'child-1', 'child-2'])] },
+  { morning: [activity('🏫', 'Daycare', ['child-1', 'child-2']), activity('💻', 'Work', ['dad'])], afternoon: [activity('🌳', 'Park', ['mum', 'child-1', 'child-2'])], night: [activity('🍽️', 'Dinner', all)] },
+  { morning: [activity('🧸', 'Play at home', ['dad', 'child-1', 'child-2'])], afternoon: [activity('👫', 'Friends', ['child-1', 'child-2', 'mum'])], night: [activity('📖', 'Stories', ['dad', 'child-1', 'child-2'])] },
+  { morning: [activity('🏫', 'Daycare', ['child-1']), activity('🏥', 'Work', ['mum'])], afternoon: [activity('🏠', 'Home', ['dad', 'child-1', 'child-2'])], night: [activity('🍽️', 'Dinner', all)] },
+  { morning: [activity('🏫', 'Daycare', ['child-1']), activity('💻', 'Work', ['dad'])], afternoon: [activity('🏊', 'Swim', ['child-1', 'dad'])], night: [activity('🍿', 'Movie', all)] },
+  { morning: [activity('🛒', 'Shopping', ['dad', 'child-2'])], afternoon: [activity('🛝', 'Playground', all)], night: [activity('🎵', 'Music', all)] },
   { morning: [activity('🚗', 'Outing', all)], afternoon: [activity('🏖️', 'Beach', all)], night: [activity('🏠', 'Home', all)] },
 ];
 
@@ -110,7 +110,7 @@ export function sampleWeekForFamily(family: Family): WeekPlan {
   const ids = new Set(family.members.map(member => member.id));
   return sampleWeek.map(day => Object.fromEntries(parts.map(part => [part.id, day[part.id].map(item => ({
     ...item,
-    who: item.who.length === defaultFamily.members.length
+    who: item.who === all
       ? family.members.map(member => member.id)
       : item.who.filter(id => ids.has(id)),
   }))])) as DayPlan);
@@ -132,11 +132,12 @@ export function readWeek(): WeekPlan {
     if (Array.isArray(saved) && saved.length === 7 && saved.every(day =>
       day && parts.every(part => Array.isArray(day[part.id]) && day[part.id].every(isActivity)))) {
       const seen = new Set<string>();
-      return (saved as WeekPlan).map(day => Object.fromEntries(parts.map(part => [part.id, day[part.id].map(item => {
+      const week = (saved as WeekPlan).map(day => Object.fromEntries(parts.map(part => [part.id, day[part.id].map(item => {
         const id = typeof item.id === 'string' && item.id && !seen.has(item.id) ? item.id : newActivityId();
         seen.add(id);
         return { ...item, id, who: item.who.filter(personId => memberIds.has(personId)) };
       })])) as DayPlan);
+      return week;
     }
   } catch { /* Storage can be unavailable or contain older data. */ }
   return sampleWeekForFamily(readFamily());

@@ -15,6 +15,7 @@ import {
 import { findOpenMoji, openMojiUrl, searchOpenMoji, type OpenMojiIcon } from './openmoji';
 import { fitImageScale, imageFromFile, isCustomIcon, readCustomIcons, saveCustomIcons, validateIconFile, type CustomIcon, type IconScope } from './customIcons';
 import { calendarSettingsKey, readCalendarSettings, visibleDays, type CalendarSettings, type VisibleDay, type WeekStart } from './calendarView';
+import { createBackup, parseBackup, saveBackup, type PlannerBackup } from './backup';
 
 interface EditTarget { day: number; part: PartId; index: number | null }
 interface UndoMove { token: number; before: WeekPlan; message: string }
@@ -680,6 +681,55 @@ function CalendarSettingsDialog({ settings, onSave, onClose }: {
   </dialog>;
 }
 
+function BackupDialog({ onExport, onImport, onClose }: {
+  onExport: () => void; onImport: (backup: PlannerBackup) => void; onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const [pending, setPending] = useState<{ fileName: string; backup: PlannerBackup } | null>(null);
+  const [message, setMessage] = useState('');
+  useEffect(() => { dialog.current?.showModal(); }, []);
+
+  async function chooseFile(file: File) {
+    setPending(null);
+    setMessage('');
+    try {
+      if (file.size > 20 * 1024 * 1024) throw new Error('That backup file is too large (maximum 20 MB).');
+      setPending({ fileName: file.name, backup: parseBackup(await file.text()) });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not read this backup.');
+    } finally {
+      if (input.current) input.current.value = '';
+    }
+  }
+
+  function importPending() {
+    if (!pending) return;
+    try {
+      onImport(pending.backup);
+      setPending(null);
+      setMessage('Backup imported successfully.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not import this backup.');
+    }
+  }
+
+  return <dialog ref={dialog} className="backup-dialog" aria-labelledby="backupTitle" onClose={onClose}>
+    <div className="modal-head"><h2 id="backupTitle">Backup</h2><button className="xclose" type="button" onClick={onClose} aria-label="Close">×</button></div>
+    <div className="modal-body">
+      <p className="settings-intro">Move your planner to another device with a backup file. It includes your family, week, calendar view, and custom images.</p>
+      <section className="backup-option"><h3>Export</h3><p>Download a backup to send to your phone or keep for later.</p><button className="btn" type="button" onClick={() => {
+        try { onExport(); setMessage('Backup downloaded. Send the file to your phone, then import it there.'); }
+        catch { setMessage('Could not download the backup. Please try again.'); }
+      }}>⬇️ Download backup</button></section>
+      <section className="backup-option"><h3>Import</h3><p>Choose a Little Week backup file from this device.</p><button className="btn" type="button" onClick={() => input.current?.click()}>⬆️ Choose backup file</button><input ref={input} type="file" accept=".json,application/json" hidden aria-label="Choose Little Week backup" onChange={event => { const file = event.target.files?.[0]; if (file) void chooseFile(file); }} /></section>
+      {pending && <div className="backup-confirm"><strong>{pending.fileName}</strong><span>{pending.backup.family.name} · {pending.backup.family.members.length} family members · {pending.backup.customIcons.length} custom icons</span><p>Importing will replace the planner data saved on this device.</p><div className="backup-confirm-actions"><button className="btn" type="button" onClick={() => setPending(null)}>Cancel</button><button className="btn primary" type="button" onClick={importPending}>Replace with backup</button></div></div>}
+      {message && <p className="backup-message" role="status">{message}</p>}
+    </div>
+    <div className="modal-foot"><button className="btn" type="button" onClick={onClose}>Close</button></div>
+  </dialog>;
+}
+
 export default function App() {
   const [family, setFamily] = useState<Family>(readFamily);
   const [week, setWeek] = useState<WeekPlan>(readWeek);
@@ -687,6 +737,7 @@ export default function App() {
   const [calendarSettings, setCalendarSettings] = useState(readCalendarSettings);
   const [editingCalendar, setEditingCalendar] = useState(false);
   const [editingCustomIcons, setEditingCustomIcons] = useState(false);
+  const [editingBackup, setEditingBackup] = useState(false);
   const [today, setToday] = useState(() => new Date());
   const [target, setTarget] = useState<EditTarget | null>(null);
   const [editingFamily, setEditingFamily] = useState(false);
@@ -825,6 +876,29 @@ export default function App() {
     }
   }
 
+  function exportBackup() {
+    const contents = JSON.stringify(createBackup(family, week, calendarSettings, customIcons), null, 2);
+    const url = URL.createObjectURL(new Blob([contents], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `little-week-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
+  function importBackup(backup: PlannerBackup) {
+    saveBackup(backup, localStorage);
+    setFamily(backup.family);
+    setWeek(backup.week);
+    setCalendarSettings(backup.calendarSettings);
+    setCustomIcons(backup.customIcons);
+    setToday(new Date());
+    setTarget(null);
+    setUndoMove(null);
+  }
+
   function saveFamily(nextFamily: Family) {
     const memberIds = new Set(nextFamily.members.map(member => member.id));
     setWeek(current => current.map(day => Object.fromEntries(parts.map(part => [part.id, day[part.id].map(activity =>
@@ -841,7 +915,7 @@ export default function App() {
   return <FamilyContext.Provider value={family}><CustomIconsContext.Provider value={customIcons}><main className={`shell ${showBackToTop ? 'with-back-to-top' : ''}`}>
     <header className="top">
       <div className="titleline"><img className="site-logo" src={`${import.meta.env.BASE_URL}logo/little-week.png`} alt="" /><div><h1>{family.name}</h1><p className="sub">The picture shows <strong>what</strong> we're doing. The little faces show <strong>who</strong> is doing it.</p></div></div>
-      <div className="actions"><button className="btn" type="button" onClick={() => setEditingFamily(true)}>👨‍👩‍👧‍👦 Edit family</button><button className="btn" type="button" onClick={() => setEditingCalendar(true)}>📅 Calendar view: {calendarSettings.start === 'today' ? 'Today' : calendarSettings.start === 'sunday' ? 'Sunday' : 'Monday'}</button><button className="btn" type="button" onClick={() => setEditingCustomIcons(true)}>🎨 Custom icons</button><button className="btn" type="button" onClick={reset}>↺ Reset example</button><button className="btn primary" type="button" onClick={() => window.print()}>🖨️ Print A4</button></div>
+      <div className="actions"><button className="btn" type="button" onClick={() => setEditingFamily(true)}>👨‍👩‍👧‍👦 Edit family</button><button className="btn" type="button" onClick={() => setEditingCalendar(true)}>📅 Calendar view: {calendarSettings.start === 'today' ? 'Today' : calendarSettings.start === 'sunday' ? 'Sunday' : 'Monday'}</button><button className="btn" type="button" onClick={() => setEditingCustomIcons(true)}>🎨 Custom icons</button><button className="btn" type="button" onClick={() => setEditingBackup(true)}>💾 Backup</button><button className="btn" type="button" onClick={reset}>↺ Reset example</button><button className="btn primary" type="button" onClick={() => window.print()}>🖨️ Print A4</button></div>
     </header>
     <Legend />
     <div className="intro">Tap an activity to edit it. Drag it to another spot to move it (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
@@ -852,6 +926,7 @@ export default function App() {
     {editingFamily && <FamilyEditor family={family} week={week} onSave={saveFamily} onClose={() => setEditingFamily(false)} onAddCustomIcon={addCustomIcon} />}
     {editingCalendar && <CalendarSettingsDialog settings={calendarSettings} onSave={settings => { setToday(new Date()); setCalendarSettings(settings); setEditingCalendar(false); }} onClose={() => setEditingCalendar(false)} />}
     {editingCustomIcons && <CustomIconsManager icons={customIcons} onAdd={addCustomIcon} onUpdate={updateCustomIcon} onDelete={deleteCustomIcon} onClose={() => setEditingCustomIcons(false)} />}
+    {editingBackup && <BackupDialog onExport={exportBackup} onImport={importBackup} onClose={() => setEditingBackup(false)} />}
     {undoMove && <MoveToast message={undoMove.message} onUndo={() => { setWeek(undoMove.before); setUndoMove(null); }} onDismiss={() => setUndoMove(null)} />}
   </main></CustomIconsContext.Provider></FamilyContext.Provider>;
 }

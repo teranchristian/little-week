@@ -13,6 +13,8 @@ npm run dev
 
 Activities can be added, edited, deleted and dragged within or between days and parts of the day. On touch screens, hold an activity briefly before dragging it; tapping still opens the editor. A move shows a brief Undo message. Edit family changes the planner name, member names and emojis, and adds or removes members. Choosing a member emoji already used by an activity shows a warning. Calendar view lets you start on Monday (default), Sunday, or Today. Today can show 1–7 days including today, and rolls forward as the date changes. Activities remain attached to their weekdays. The week, family, calendar view and custom icons are saved in this browser's localStorage. The print button uses the template's A4 landscape print layout.
 
+Open **Backup** to export or import a JSON file containing the week, family, calendar view, and custom icon images. Send the exported file to another device and import it there. Import validates the file and asks before replacing data on that device. Keep the backup file private because it contains family details and images.
+
 `npm test` checks the calendar ordering, date rollover, day-count limits, and saved-setting validation.
 
 The planner data is kept in `src/planner.ts` so recurring routines, one day exceptions and calendar integration can be added later. Those features are outside this MVP.
