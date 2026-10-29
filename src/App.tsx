@@ -34,10 +34,8 @@ function Face({ id }: { id: PersonId }) {
 }
 
 function Participants({ who }: { who: PersonId[] }) {
-  const members = useContext(FamilyContext).members;
-  const everyone = members.length > 1 && members.every(person => who.includes(person.id));
   return <span className="people">
-    {everyone ? <span className="all-people" title="Everyone" aria-label="Everyone"><IconPicture emoji={familyIcon} className="all-icon" /><span className="all-label">All</span></span> : who.map(id => <Face key={id} id={id} />)}
+    {who.map(id => <Face key={id} id={id} />)}
   </span>;
 }
 
@@ -229,6 +227,51 @@ function Calendar({ week, displayedDays, onEdit, onCommit }: {
   function edit(target: EditTarget) {
     if (!suppressDragClick.current) onEdit(target);
   }
+
+  useEffect(() => {
+    // Keep the printed calendar full width and fit its content into one page.
+    function fitPrint() {
+      const calendar = document.querySelector<HTMLElement>('.calendar');
+      const scroll = calendar?.closest<HTMLElement>('.scroll');
+      if (!calendar || !scroll) return;
+      // Chrome's beforeprint event can run before print media styles take effect.
+      // Apply those media rules temporarily so measurements match the PDF.
+      const mediaRules: [MediaList, string][] = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        for (const rule of Array.from(sheet.cssRules)) {
+          if (!(rule instanceof CSSMediaRule)) continue;
+          mediaRules.push([rule.media, rule.media.mediaText]);
+          rule.media.mediaText = rule.media.mediaText.includes('print') ? 'all' : 'not all';
+        }
+      }
+      try {
+        scroll.style.removeProperty('--print-scale');
+        const availableHeight = 198 * 96 / 25.4; // A4 height minus the page padding.
+        if (calendar.getBoundingClientRect().height <= availableHeight) return;
+        // Wider columns at smaller scales can reduce avatar wrapping, so remeasure.
+        let lower = 0.01;
+        let upper = 1;
+        for (let i = 0; i < 14; i++) {
+          const scale = (lower + upper) / 2;
+          scroll.style.setProperty('--print-scale', String(scale));
+          if (calendar.getBoundingClientRect().height <= availableHeight) lower = scale;
+          else upper = scale;
+        }
+        scroll.style.setProperty('--print-scale', String(lower));
+      } finally {
+        for (const [media, original] of mediaRules) media.mediaText = original;
+      }
+    }
+    function resetPrint() {
+      document.querySelector<HTMLElement>('.scroll')?.style.removeProperty('--print-scale');
+    }
+    window.addEventListener('beforeprint', fitPrint);
+    window.addEventListener('afterprint', resetPrint);
+    return () => {
+      window.removeEventListener('beforeprint', fitPrint);
+      window.removeEventListener('afterprint', resetPrint);
+    };
+  }, []);
 
   const visibleWeek = preview ?? week;
   const printRowWeights = parts.map(part => Math.max(0, ...displayedDays.map(({ index }) => visibleWeek[index][part.id].length)) + 0.4);

@@ -125,7 +125,9 @@ dialog{border:0;border-radius:19px;box-shadow:0 24px 75px #183b3450;width:min(51
 }
 
 @media print{
-  .shell{min-height:209mm;padding:5.5mm;display:flex;align-items:center;justify-content:center}
+  .shell{width:297mm;height:209mm;min-height:0;padding:5.5mm;display:flex;align-items:center;justify-content:center}
+  .scroll{flex:none;width:calc(286mm / var(--print-scale,1));zoom:var(--print-scale,1)}
+  .calendar{min-height:calc(197.5mm / var(--print-scale,1))}
   .shell > :not(.scroll),
   .day-nav,
   .drag-overlay{display:none!important}
@@ -174,7 +176,7 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
 @media screen and (max-width:900px){.family-member{gap:6px}.remove-member{font-size:11px}}
 .face-0{background:#d5ede5}.face-1{background:#ffe2eb}.face-2{background:#e6dcfd}.face-3{background:#fff0cd}
 
-/* Leave the faces only the space beside the activity picture, then wrap them. */
+/* Keep participant rows within their card, wrapping larger families. */
 .activity-details{max-width:100%}
 .people{max-width:100%;min-width:0;flex-wrap:wrap}
 @media screen{
@@ -200,12 +202,14 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
 @media screen and (max-width:900px){.custom-icon-dialog{width:100vw}}
 
 @media screen{
-  .activities>.activity{display:flex;flex-direction:row;justify-content:flex-start;align-items:center;min-height:76px;gap:12px;padding:8px 12px}
+  .activity{flex-direction:column}
+  .activities>.activity{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:125px;gap:6px;padding:8px 5px}
   .activity-emoji,.activities>.activity:only-child .activity-emoji{display:grid;place-items:center;width:52px;min-width:52px;height:52px;min-height:52px;font-size:48px}
-  .activity-details{align-items:flex-start;align-self:center;justify-content:flex-start;min-height:64px;text-align:left;gap:4px}
+  .activity-details{flex:0 0 auto;align-items:center;align-self:center;min-height:0;text-align:center;gap:5px}
   .activity-name{font-size:14px;line-height:1.25}
-  .people{justify-content:flex-start}
-  .people .face,.activities>.activity:only-child .people .face{width:27px;height:27px;font-size:21px}
+  .people{justify-content:center;gap:4px}
+  .people .face,.activities>.activity:only-child .people .face,
+  .hide-words .people .face{width:34px;height:34px;font-size:26px}
   .all-people{font-size:12px}
   .all-icon{font-size:21px}
   .activity .all-icon{font-size:54px}
@@ -245,27 +249,49 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
 }
 
 @media print{
-  .calendar{grid-template-rows:9mm var(--print-morning-height,61mm) var(--print-afternoon-height,61mm) var(--print-night-height,61mm)}
-  .activity{flex-direction:row;gap:1.5mm;padding:2mm 1mm;align-items:center;justify-content:center}
+  .calendar{grid-template-rows:9mm minmax(var(--print-morning-height,61mm),auto) minmax(var(--print-afternoon-height,61mm),auto) minmax(var(--print-night-height,61mm),auto)}
+  .activities>.activity{flex:1 0 auto;overflow:visible}
+  .part,.activities{overflow:visible}
+  .activity{flex-direction:column;gap:1mm;padding:2mm 1mm;align-items:center;justify-content:center}
   .activity-emoji,.activities>.activity:only-child .activity-emoji,
   .hide-words .activity-emoji,.hide-words .activities>.activity:only-child .activity-emoji{
     display:grid;place-items:center;flex:none;width:14mm;min-width:14mm;height:14mm;min-height:14mm;font-size:50px
   }
-  .activity-details{flex:0 1 auto;align-items:center;min-width:0;max-width:calc(100% - 15.5mm);gap:1.5mm;text-align:center}
+  .activity-details{flex:0 1 auto;align-items:center;min-width:0;max-width:100%;gap:1mm;text-align:center}
   .activity-name{font-size:11px;line-height:1.2}
   .people{justify-content:center;max-width:100%}
   .people .face,.activities>.activity:only-child .people .face{width:6.5mm;height:6.5mm;font-size:20px}
   .all-people{font-size:11px}
   .all-icon{font-size:34px}
-  .calendar.short-view .activity{gap:3mm}
+  .calendar.short-view .activity{gap:1.5mm}
   .calendar.short-view .activity-emoji,
   .calendar.short-view .activities>.activity:only-child .activity-emoji{
     width:18mm;min-width:18mm;height:18mm;min-height:18mm;font-size:64px
   }
-  .calendar.short-view .activity-details{max-width:calc(100% - 21mm)}
+  .calendar.short-view .activity-details{max-width:100%}
   .calendar.short-view .activity-name{font-size:15px}
   .calendar.short-view .people .face,
   .calendar.short-view .activities>.activity:only-child .people .face{width:8mm;height:8mm;font-size:24px}
   .calendar.short-view .all-people{font-size:14px}
   .calendar.short-view .all-icon{font-size:46px}
+}
+
+/* Larger pictures and unobstructed faces in activity cards. */
+@media screen {
+  .activity .activity-emoji,
+  .activities > .activity:only-child .activity-emoji,
+  .hide-words .activities > .activity:only-child .activity-emoji {
+    width:80px; min-width:80px; height:80px; min-height:80px; font-size:76px;
+  }
+  .activity .people { gap:4px }
+  .activity .people .face,
+  .activities > .activity:only-child .people .face,
+  .hide-words .activity .people .face { width:48px; height:48px; font-size:48px; background:transparent }
+}
+@media print {
+  .activity .people .face,
+  .activities > .activity:only-child .people .face,
+  .hide-words .activity .people .face { width:9mm; height:9mm; font-size:28px; background:transparent }
+  .calendar.short-view .activity .people .face,
+  .calendar.short-view .activities > .activity:only-child .people .face { width:10mm; height:10mm; font-size:32px }
 }
