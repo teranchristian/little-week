@@ -30,6 +30,10 @@ export function validateIconFile(file: File): void {
 
 export interface ImageCrop { zoom: number; x: number; y: number }
 
+export function fitImageScale(width: number, height: number, squareSize: number): number {
+  return Math.min(squareSize / width, squareSize / height);
+}
+
 export async function imageFromFile(file: File, crop: ImageCrop): Promise<string> {
   validateIconFile(file);
 
@@ -43,7 +47,7 @@ export async function imageFromFile(file: File, crop: ImageCrop): Promise<string
     canvas.height = 128;
     const context = canvas.getContext('2d');
     if (!context) throw new Error('This browser could not process the image.');
-    const scale = Math.max(128 / source.naturalWidth, 128 / source.naturalHeight) * crop.zoom;
+    const scale = fitImageScale(source.naturalWidth, source.naturalHeight, 128) * crop.zoom;
     const width = source.naturalWidth * scale;
     const height = source.naturalHeight * scale;
     context.drawImage(source, (128 - width) / 2 + crop.x * 128 / 240, (128 - height) / 2 + crop.y * 128 / 240, width, height);

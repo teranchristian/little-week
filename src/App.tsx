@@ -13,7 +13,7 @@ import {
   type Activity, type ActivityDestination, type ActivityPosition, type Family, type PartId, type PersonId, type WeekPlan,
 } from './planner';
 import { findOpenMoji, openMojiUrl, searchOpenMoji, type OpenMojiIcon } from './openmoji';
-import { imageFromFile, isCustomIcon, readCustomIcons, saveCustomIcons, validateIconFile, type CustomIcon, type IconScope } from './customIcons';
+import { fitImageScale, imageFromFile, isCustomIcon, readCustomIcons, saveCustomIcons, validateIconFile, type CustomIcon, type IconScope } from './customIcons';
 import { calendarSettingsKey, readCalendarSettings, visibleDays, type CalendarSettings, type VisibleDay, type WeekStart } from './calendarView';
 
 interface EditTarget { day: number; part: PartId; index: number | null }
@@ -301,13 +301,13 @@ function CustomIconDialog({ scope, onSave, onClose }: {
   const fileRequest = useRef(0);
   const drag = useRef<{ pointerId: number; x: number; y: number; offsetX: number; offsetY: number } | null>(null);
   const [source, setSource] = useState<{ file: File; url: string; width: number; height: number } | null>(null);
-  const [zoom, setZoom] = useState(1.4);
+  const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [name, setName] = useState('');
   const [tag, setTag] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const baseScale = source ? Math.max(240 / source.width, 240 / source.height) : 1;
+  const baseScale = source ? fitImageScale(source.width, source.height, 240) : 1;
   const imageWidth = source ? source.width * baseScale * zoom : 0;
   const imageHeight = source ? source.height * baseScale * zoom : 0;
   const limitX = Math.max(0, (imageWidth - 240) / 2);
@@ -333,7 +333,7 @@ function CustomIconDialog({ scope, onSave, onClose }: {
       if (!preview.naturalWidth || !preview.naturalHeight) throw new Error('Could not read this image.');
       const baseName = file.name.replace(/\.[^.]+$/, '').trim().slice(0, 25);
       setSource({ file, url, width: preview.naturalWidth, height: preview.naturalHeight });
-      setZoom(1.4);
+      setZoom(1);
       setOffset({ x: 0, y: 0 });
       if (!name) setName(baseName);
       if (!tag) setTag(baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 25));
