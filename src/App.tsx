@@ -83,12 +83,33 @@ function Calendar({ week, onEdit, onCommit }: {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const [dragging, setDragging] = useState<Activity | null>(null);
+  const [activeDay, setActiveDay] = useState(0);
+  const dayNav = useRef<HTMLElement>(null);
   const [preview, setPreview] = useState<WeekPlan | null>(null);
   const originalWeek = useRef<WeekPlan | null>(null);
   const activeId = useRef<string | null>(null);
   const previewWeek = useRef<WeekPlan | null>(null);
   const previewKey = useRef<string | null>(null);
   const suppressDragClick = useRef(false);
+
+  useEffect(() => {
+    const updateActiveDay = () => {
+      const navBottom = dayNav.current?.getBoundingClientRect().bottom ?? 0;
+      let visibleDay = 0;
+      days.forEach((_, index) => {
+        const dayTop = document.getElementById(`day-${index}`)?.getBoundingClientRect().top;
+        if (dayTop !== undefined && dayTop <= navBottom + 8) visibleDay = index;
+      });
+      setActiveDay(visibleDay);
+    };
+    updateActiveDay();
+    window.addEventListener('scroll', updateActiveDay, { passive: true });
+    window.addEventListener('resize', updateActiveDay);
+    return () => {
+      window.removeEventListener('scroll', updateActiveDay);
+      window.removeEventListener('resize', updateActiveDay);
+    };
+  }, []);
 
   const collisionDetection: CollisionDetection = args => {
     const pointerHits = pointerWithin(args);
@@ -181,8 +202,8 @@ function Calendar({ week, onEdit, onCommit }: {
 
   const visibleWeek = preview ?? week;
   return <section className="scroll" aria-label="Weekly family activities">
-    <nav className="day-nav" aria-label="Jump to day">
-      {days.map((day, index) => <button key={day} type="button" onClick={() => document.getElementById(`day-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{day}</button>)}
+    <nav ref={dayNav} className="day-nav" aria-label="Jump to day">
+      {days.map((day, index) => <button key={day} type="button" className={activeDay === index ? 'active' : ''} aria-current={activeDay === index ? 'location' : undefined} onClick={() => document.getElementById(`day-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{day}</button>)}
     </nav>
     <div className="calendar">
     <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={dragStart} onDragMove={updatePreview} onDragOver={updatePreview} onDragEnd={dragEnd} onDragCancel={clearDrag}>
