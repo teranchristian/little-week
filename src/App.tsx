@@ -23,7 +23,7 @@ const CustomIconsContext = createContext<CustomIcon[]>([]);
 
 function MemberEmoji({ emoji }: { emoji: string }) {
   const custom = useContext(CustomIconsContext).find(item => item.scope === 'family' && item.id === emoji);
-  return custom ? <img className="member-picture" src={custom.image} alt="" /> : <>{emoji}</>;
+  return custom ? <img className="member-picture" src={custom.image} alt="" /> : <span className="member-glyph">{emoji}</span>;
 }
 
 function Face({ id }: { id: PersonId }) {
