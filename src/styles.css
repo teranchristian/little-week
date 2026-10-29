@@ -129,6 +129,9 @@ dialog{border:0;border-radius:19px;box-shadow:0 24px 75px #183b3450;width:min(51
 }
 
 .activity-emoji img,.choice .big img,.all-icon img{display:block;width:1em;height:1em;object-fit:contain}
+.custom-icon-upload{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 0 10px}
+.custom-icon-upload .btn{padding:8px 11px;white-space:nowrap}
+.custom-icon-error{margin:0 0 10px;color:#a33131;font-size:12px}
 .family-picture{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:1px;place-items:center;width:1em;min-width:1em;height:1em;min-height:1em;padding:.04em;border-radius:.18em;background:#fff0b8;line-height:1}
 .family-picture-face{display:grid;place-items:center;width:100%;height:100%;border-radius:50%;font-size:.42em;line-height:1}
 .family-picture-face.dad{background:#d5ede5}.family-picture-face.mum{background:#ffe2eb}.family-picture-face.ema{background:#e6dcfd}.family-picture-face.haru{background:#fff0cd}
@@ -176,3 +179,32 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .people{width:100%}
 }
 @media screen and (min-width:901px){.activities>.activity{flex-basis:auto}}
+
+.member-picture{display:block;width:100%;height:100%;object-fit:contain}
+.custom-icon-dialog{width:min(440px,calc(100vw - 28px))}
+.custom-icon-preview{position:relative;display:grid;place-items:center;width:240px;height:240px;margin:14px auto 10px;overflow:hidden;outline:2px solid #27826a;border-radius:14px;background:#f8faf6;color:var(--muted);font-size:13px;touch-action:none}
+.custom-icon-preview.can-drag{cursor:grab}
+.custom-icon-preview.can-drag:active{cursor:grabbing}
+.custom-icon-preview img{position:absolute;left:50%;top:50%;max-width:none;max-height:none;pointer-events:none;user-select:none}
+.custom-icon-zoom{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;margin:0 0 18px;font-size:12px;color:var(--ink)}
+.custom-icon-zoom .hint{grid-column:1/-1;text-align:center}
+.custom-icon-zoom input{width:100%;accent-color:#27826a}
+.custom-icon-field{display:block;margin-top:17px}
+.custom-icon-dialog .section-title{display:block}
+.custom-icon-tag{color:var(--muted);font-size:10px;overflow-wrap:anywhere}
+@media screen and (max-width:900px){.custom-icon-dialog{width:100vw}}
+
+@media screen{
+  .activities>.activity{display:flex;flex-direction:row;justify-content:flex-start;align-items:center;min-height:76px;gap:12px;padding:8px 12px}
+  .activity-emoji,.activities>.activity:only-child .activity-emoji{display:grid;place-items:center;width:52px;min-width:52px;height:52px;min-height:52px;font-size:48px}
+  .activity-details{align-items:flex-start;align-self:center;text-align:left;gap:4px}
+  .activity-name{font-size:14px;line-height:1.25}
+  .people{justify-content:flex-start}
+  .people .face,.activities>.activity:only-child .people .face{width:27px;height:27px;font-size:21px}
+  .all-people{font-size:12px}
+  .all-icon{font-size:21px}
+  .hide-words .activities>.activity{justify-content:center;min-height:100px}
+  .hide-words .activity-details{flex:0 1 auto;align-items:center}
+  .hide-words .people{justify-content:center}
+  .hide-words .activity-emoji,.hide-words .activities>.activity:only-child .activity-emoji{width:64px;min-width:64px;height:64px;min-height:64px;font-size:60px}
+}
