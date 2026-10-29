@@ -442,7 +442,9 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose, onA
       {visibleIcons.length === 0 && visibleCustomIcons.length === 0 && <div className="icon-empty">No icons found. Try another word.</div>}
       <label htmlFor="activityName" className="hint">Short label (optional for printing)</label>
       <input id="activityName" className="mini-input" maxLength={25} value={label} onChange={event => setLabel(event.target.value)} />
-      <div className="section-title person-section-title">2. Who is doing it?</div>
+      <div className="section-title person-section-title person-section-heading">2. Who is doing it?
+        <button className="select-all-link" type="button" aria-label="Select all family members" onClick={() => setWho(members.map(person => person.id))}>all</button>
+      </div>
       <div className="person-grid">{members.map(person => <button key={person.id} type="button" className={`person-choice ${who.includes(person.id) ? 'selected' : ''}`} aria-pressed={who.includes(person.id)} onClick={() => togglePerson(person.id)}>
         <Face id={person.id} />{person.name}
       </button>)}</div>

@@ -13,6 +13,8 @@ dialog{border:0;border-radius:19px;box-shadow:0 24px 75px #183b3450;width:min(51
 @media print{html,body{margin:0;background:white!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.shell{margin:0;padding:0;max-width:none}.top{margin-bottom:2.5mm}.titleline h1{font-size:24px;letter-spacing:-.6px}.rainbow{font-size:29px}.sub{display:none}.actions,.intro,.add,.smallnote{display:none!important}.legend{margin:0 0 2.5mm;gap:5px}.legend-person{border:none;background:#f8faf6;padding:2px 6px 2px 3px;font-size:8.6px}.legendlabel{font-size:8px}.face{width:18px;height:18px;font-size:14px}.scroll{overflow:visible;padding:0;width:100%}.calendar{grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:9mm repeat(3,50mm);min-width:0;gap:1.8mm}.day{display:contents}.day-head{border-radius:7px;padding:6px 0;font-size:10px}.part{border-radius:7px;min-height:0;height:100%;padding:5px 4px;gap:4px;break-inside:avoid;overflow:hidden}.part-head{font-size:8.2px;padding:0 2px;gap:2px}.part-head .symbol{font-size:10px}.activities{gap:3px}.activity{border-radius:6px;min-height:0;padding:3px 2px;gap:1px;flex:1 1 0;overflow:hidden}.activity-emoji{font-size:19px;min-width:21px}.activity-name{font-size:7.5px}.people{gap:2px}.people .face{height:16px;width:16px;font-size:12px}.hide-words .activity-emoji{font-size:24px}.hide-words .people .face{height:18px;width:18px;font-size:15px}.hide-words .part{min-height:0}.hide-words .activity{min-height:0}.activities > .activity:only-child .activity-emoji,.hide-words .activities > .activity:only-child .activity-emoji{font-size:39px}.activities > .activity:only-child .people .face{height:24px;width:24px;font-size:20px}dialog{display:none}}
 
 .person-section-title{margin-top:20px}
+.person-section-heading{display:flex;align-items:baseline;gap:10px}
+.select-all-link{border:0;background:none;padding:0;color:var(--teal);font:inherit;text-decoration:underline;text-underline-offset:2px}
 .all-people{display:inline-flex;align-items:center;justify-content:center;gap:3px;white-space:nowrap;font-size:11px;font-weight:800;color:#45524b}
 .all-icon{font-size:19px;line-height:1}
 .hide-words .all-label{display:none}
@@ -203,7 +205,7 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .people .face,.activities>.activity:only-child .people .face{width:27px;height:27px;font-size:21px}
   .all-people{font-size:12px}
   .all-icon{font-size:21px}
-  .activity .all-icon{font-size:40px}
+  .activity .all-icon{font-size:54px}
   .hide-words .activities>.activity{justify-content:center;min-height:100px}
   .hide-words .activity-details{flex:0 1 auto;align-items:center;min-height:0}
   .hide-words .people{justify-content:center}
@@ -246,7 +248,7 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .people{justify-content:flex-start;max-width:100%}
   .people .face,.activities>.activity:only-child .people .face{width:6.5mm;height:6.5mm;font-size:20px}
   .all-people{font-size:11px}
-  .all-icon{font-size:23px}
+  .all-icon{font-size:34px}
   .calendar.short-view .activity{gap:3mm}
   .calendar.short-view .activity-emoji,
   .calendar.short-view .activities>.activity:only-child .activity-emoji{
@@ -257,5 +259,5 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .calendar.short-view .people .face,
   .calendar.short-view .activities>.activity:only-child .people .face{width:8mm;height:8mm;font-size:24px}
   .calendar.short-view .all-people{font-size:14px}
-  .calendar.short-view .all-icon{font-size:29px}
+  .calendar.short-view .all-icon{font-size:46px}
 }
