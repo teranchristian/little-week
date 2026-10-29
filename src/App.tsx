@@ -180,9 +180,13 @@ function Calendar({ week, onEdit, onCommit }: {
   }
 
   const visibleWeek = preview ?? week;
-  return <section className="scroll" aria-label="Weekly family activities"><div className="calendar">
+  return <section className="scroll" aria-label="Weekly family activities">
+    <nav className="day-nav" aria-label="Jump to day">
+      {days.map((day, index) => <button key={day} type="button" onClick={() => document.getElementById(`day-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{day}</button>)}
+    </nav>
+    <div className="calendar">
     <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={dragStart} onDragMove={updatePreview} onDragOver={updatePreview} onDragEnd={dragEnd} onDragCancel={clearDrag}>
-      {days.map((day, dayIndex) => <article className="day" key={day}>
+      {days.map((day, dayIndex) => <article className="day" id={`day-${dayIndex}`} key={day}>
         <div className="day-head">{day}</div>
         {parts.map(part => <DayPart key={part.id} day={dayIndex} part={part} activities={visibleWeek[dayIndex][part.id]} onEdit={edit} />)}
       </article>)}
@@ -282,6 +286,7 @@ export default function App() {
   const [hideWords, setHideWords] = useState(readHideWords);
   const [target, setTarget] = useState<EditTarget | null>(null);
   const [undoMove, setUndoMove] = useState<UndoMove | null>(null);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const toastToken = useRef(0);
 
   useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify(week)); } catch { /* Private browsing can block storage. */ } }, [week]);
@@ -291,6 +296,23 @@ export default function App() {
     const timeout = window.setTimeout(() => setUndoMove(current => current?.token === undoMove.token ? null : current), 6000);
     return () => window.clearTimeout(timeout);
   }, [undoMove]);
+  useEffect(() => {
+    let hideTimeout: number | undefined;
+    const updateBackToTop = () => {
+      window.clearTimeout(hideTimeout);
+      if (window.scrollY <= 160) {
+        setShowBackToTop(false);
+      } else {
+        setShowBackToTop(true);
+        hideTimeout = window.setTimeout(() => setShowBackToTop(false), 3500);
+      }
+    };
+    window.addEventListener('scroll', updateBackToTop, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', updateBackToTop);
+      window.clearTimeout(hideTimeout);
+    };
+  }, []);
 
   function showMove(before: WeekPlan, after: WeekPlan, id: string) {
     const from = findActivity(before, id);
@@ -343,7 +365,7 @@ export default function App() {
     ? { id: newActivityId(), icon: '🛝', label: 'Playground', who: ['ema'] as PersonId[] }
     : week[target.day][target.part][target.index]);
 
-  return <main className={`shell ${hideWords ? 'hide-words' : ''}`}>
+  return <main className={`shell ${hideWords ? 'hide-words' : ''} ${showBackToTop ? 'with-back-to-top' : ''}`}>
     <header className="top">
       <div className="titleline"><span className="rainbow" aria-hidden="true">🌈</span><div><h1>Our Week</h1><p className="sub">The picture shows <strong>what</strong> we're doing. The little faces show <strong>who</strong> is doing it.</p></div></div>
       <div className="actions"><button className="btn" type="button" onClick={() => setHideWords(value => !value)}>{hideWords ? '👀 Show words' : '🙈 Hide words'}</button><button className="btn" type="button" onClick={reset}>↺ Reset example</button><button className="btn primary" type="button" onClick={() => window.print()}>🖨️ Print A4</button></div>
@@ -352,6 +374,7 @@ export default function App() {
     <div className="intro">Tap an activity to edit it. Drag it to another spot to move it (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
     <Calendar week={week} onEdit={setTarget} onCommit={commitMove} />
     <p className="smallnote">All three time-of-day rows are the same height · Example activities only · Changes save on this device · A4 landscape print</p>
+    {showBackToTop && <button className="back-to-top" type="button" aria-label="Back to top" title="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })}><span aria-hidden="true">↑</span></button>}
     {target && initialActivity && <ActivityEditor target={target} activity={initialActivity} week={week} onSave={saveActivity} onDelete={deleteActivity} onClose={() => setTarget(null)} />}
     {undoMove && <MoveToast message={undoMove.message} onUndo={() => { setWeek(undoMove.before); setUndoMove(null); }} onDismiss={() => setUndoMove(null)} />}
   </main>;

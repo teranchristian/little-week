@@ -39,3 +39,55 @@ dialog{border:0;border-radius:19px;box-shadow:0 24px 75px #183b3450;width:min(51
 @media(max-width:700px){.calendar{grid-template-rows:44px repeat(3,minmax(258px,1fr))}}
 @media print{.all-people{font-size:8px}.all-icon{font-size:13px}.calendar{grid-template-rows:9mm repeat(3,50mm)}.part{height:100%;min-height:0}.activities{flex:1;min-height:0;overflow:hidden}.activities>.activity{flex:1 1 0;min-height:0}}
 @media print{.move-toast{display:none!important}}
+
+/* On phones, show the whole week as a readable vertical list. */
+.day-nav{display:none}
+.back-to-top{display:none}
+@media screen and (max-width:900px){
+  .shell{padding:16px 14px 28px}
+  .top{gap:16px;margin-bottom:16px}
+  .titleline{align-items:flex-start;gap:10px}
+  .titleline h1{font-size:32px}
+  .sub{font-size:13px;line-height:1.4}
+  .actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .actions .btn{min-height:44px;justify-content:center;text-align:center;padding:8px;font-size:12px}
+  .actions .btn.primary{grid-column:1/-1}
+  .legend{margin-bottom:13px}
+  .intro{line-height:1.45;margin-bottom:10px}
+  .scroll{width:100%;margin:0;overflow:visible;padding:0}
+  .day-nav{position:sticky;top:0;z-index:5;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -14px 14px;padding:8px 14px;background:var(--body);box-shadow:0 5px 12px #223b3812}
+  .day-nav::-webkit-scrollbar{display:none}
+  .day-nav button{flex:1 0 auto;min-width:44px;min-height:44px;border:1px solid #cbdcd3;border-radius:12px;background:white;color:var(--teal);font-size:12px;font-weight:800}
+  .day-nav button:hover{background:#e5f7ed}
+  .calendar{display:flex;flex-direction:column;gap:20px;min-width:0}
+  .day{display:flex;flex-direction:column;gap:8px;scroll-margin-top:70px}
+  .day-head{position:static;text-align:left;padding:10px 14px;font-size:15px;letter-spacing:.6px}
+  .part{height:auto;min-height:0;padding:12px;gap:9px;border-radius:14px}
+  .part-head{font-size:13px;padding:0 2px}
+  .part-head .symbol{font-size:17px}
+  .activities{flex:none;gap:7px}
+  .activities>.activity{flex:none;min-height:62px;flex-direction:row;justify-content:flex-start;gap:12px;padding:9px 12px;border-radius:11px}
+  .activity-emoji,.activities>.activity:only-child .activity-emoji,.hide-words .activities>.activity:only-child .activity-emoji{font-size:32px;min-width:38px}
+  .activity-details{align-items:flex-start;gap:5px}
+  .activity-name{font-size:14px;line-height:1.25}
+  .people{justify-content:flex-start}
+  .people .face,.activities>.activity:only-child .people .face{width:25px;height:25px;font-size:19px}
+  .hide-words .activity{justify-content:flex-start}
+  .hide-words .activity-emoji{font-size:32px}
+  .add{min-height:44px;margin:0;font-size:13px;background:#ffffff80}
+  .smallnote{line-height:1.4;margin:20px 0 0}
+  dialog{width:100vw;max-width:none;height:100dvh;max-height:none;margin:0;border-radius:0;overscroll-behavior:contain}
+  .modal-head{position:sticky;top:0;z-index:2;background:white;padding:16px 18px}
+  .modal-head h2{font-size:19px;line-height:1.25}
+  .xclose{min-width:44px;min-height:44px}
+  .modal-body{padding:16px 18px calc(18px + env(safe-area-inset-bottom))}
+  .choice{min-height:72px}
+  .person-choice{min-height:72px}
+  .mini-input{min-height:44px;font-size:16px}
+  .modal-foot{position:sticky;bottom:calc(-18px - env(safe-area-inset-bottom));z-index:2;background:white;border-top:1px solid var(--border);margin:20px -18px calc(-18px - env(safe-area-inset-bottom));padding:12px 18px calc(12px + env(safe-area-inset-bottom))}
+  .modal-foot .btn{min-height:44px}
+  .move-toast{bottom:calc(12px + env(safe-area-inset-bottom));border-radius:14px}
+  .back-to-top{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:10;display:grid;place-items:center;width:52px;height:52px;border:0;border-radius:50%;background:#1e6356aa;color:white;font-size:30px;line-height:1;box-shadow:0 4px 14px #183b3426}
+  .back-to-top:hover{background:#1e6356dd}
+  .with-back-to-top .move-toast{bottom:calc(80px + env(safe-area-inset-bottom))}
+}
