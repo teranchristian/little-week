@@ -166,3 +166,13 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
 .family-picture-face:nth-child(4n){background:#fff0cd}
 @media screen and (max-width:900px){.family-member{gap:6px}.remove-member{font-size:11px}}
 .face-0{background:#d5ede5}.face-1{background:#ffe2eb}.face-2{background:#e6dcfd}.face-3{background:#fff0cd}
+
+/* Leave the faces only the space beside the activity picture, then wrap them. */
+.activity-details{max-width:100%}
+.people{max-width:100%;min-width:0;flex-wrap:wrap}
+@media screen{
+  .activity{min-width:0}
+  .activity-details{flex:1 1 0;min-width:0}
+  .people{width:100%}
+}
+@media screen and (min-width:901px){.activities>.activity{flex-basis:auto}}
