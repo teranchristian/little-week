@@ -15,4 +15,4 @@ Activities can be added, edited, deleted and dragged within or between days and 
 
 The planner data is kept in `src/planner.ts` so recurring routines, one day exceptions and calendar integration can be added later. Those features are outside this MVP.
 
-OpenMoji asset replacement and attribution are deferred to the next icon pass. The app currently uses the template's emoji characters.
+Activity icons use [OpenMoji](https://openmoji.org/) color SVGs, licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The icon catalog includes OpenMoji names and multiple search tags. `npm run dev` and `npm run build` prepare the SVGs locally from the npm package; generated assets are kept out of Git. Existing calendar emoji values remain compatible.

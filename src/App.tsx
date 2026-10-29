@@ -12,6 +12,7 @@ import {
   sampleWeek, storageKey, wordsStorageKey,
   type Activity, type ActivityDestination, type ActivityPosition, type PartId, type PersonId, type WeekPlan,
 } from './planner';
+import { findOpenMoji, openMojiUrl, searchOpenMoji, type OpenMojiIcon } from './openmoji';
 
 interface EditTarget { day: number; part: PartId; index: number | null }
 interface UndoMove { token: number; before: WeekPlan; message: string }
@@ -38,9 +39,14 @@ function slotId(day: number, part: PartId) { return `slot:${day}:${part}`; }
 
 function ActivityContent({ activity }: { activity: Activity }) {
   return <>
-    <span className="activity-emoji" aria-hidden="true">{activity.icon}</span>
+    <IconPicture emoji={activity.icon} className="activity-emoji" />
     <span className="activity-details"><span className="activity-name">{activity.label}</span><Participants who={activity.who} /></span>
   </>;
+}
+
+function IconPicture({ emoji, className }: { emoji: string; className: string }) {
+  const url = openMojiUrl(emoji);
+  return <span className={className} aria-hidden="true">{url ? <img src={url} alt="" /> : emoji}</span>;
 }
 
 function ActivityCard({ day, part, index, activity, onEdit }: {
@@ -222,8 +228,10 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose }: {
   onDelete: () => void; onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const iconSearch = useRef<HTMLInputElement>(null);
   const [icon, setIcon] = useState(activity.icon);
   const [label, setLabel] = useState(activity.label);
+  const [iconQuery, setIconQuery] = useState('');
   const [who, setWho] = useState<PersonId[]>(activity.who);
   const [destinationDay, setDestinationDay] = useState(target.day);
   const [destinationPart, setDestinationPart] = useState<PartId>(target.part);
@@ -231,12 +239,34 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose }: {
   const availableActivities = (day: number, part: PartId) => week[day][part].filter((_, index) =>
     !(target.index !== null && target.day === day && target.part === part && target.index === index));
   const destinationActivities = availableActivities(destinationDay, destinationPart);
+  const usedIcons = new Map<string, number>();
+  for (const day of week) for (const part of parts) for (const item of day[part.id]) {
+    usedIcons.set(item.icon, (usedIcons.get(item.icon) ?? 0) + 1);
+  }
+  const featuredEmojis = [
+    ...[...usedIcons].sort((a, b) => b[1] - a[1]).map(([emoji]) => emoji),
+    ...icons.map(([emoji]) => emoji),
+  ];
+  const featuredIcons = [...new Map(featuredEmojis.map(emoji => {
+    const entry = findOpenMoji(emoji);
+    return entry ? [entry.hexcode, entry] as const : null;
+  }).filter((entry): entry is readonly [string, OpenMojiIcon] => entry !== null)).values()].slice(0, 9);
+  const currentIcon = findOpenMoji(icon);
+  if (!iconQuery.trim() && currentIcon && !featuredIcons.some(entry => entry.hexcode === currentIcon.hexcode)) {
+    featuredIcons[featuredIcons.length - 1] = currentIcon;
+  }
+  const visibleIcons = iconQuery.trim() ? searchOpenMoji(iconQuery) : featuredIcons;
 
-  useEffect(() => { dialog.current?.showModal(); }, []);
+  useEffect(() => {
+    dialog.current?.showModal();
+    iconSearch.current?.focus();
+    iconSearch.current?.select();
+  }, []);
 
   function chooseIcon(nextIcon: string, nextLabel: string) {
     const previous = icons.find(([value]) => value === icon);
-    if (!previous || label === previous[1]) setLabel(nextLabel);
+    const previousName = previous?.[1] ?? findOpenMoji(icon)?.name;
+    if (!previousName || label === previousName) setLabel(nextLabel);
     setIcon(nextIcon);
   }
 
@@ -248,19 +278,31 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose }: {
 
   function save() {
     onSave(
-      { id: activity.id, icon, label: label.trim() || icons.find(([value]) => value === icon)?.[1] || 'Activity', who },
+      { id: activity.id, icon, label: label.trim() || icons.find(([value]) => value === icon)?.[1] || findOpenMoji(icon)?.name || 'Activity', who },
       { day: destinationDay, part: destinationPart, index: Math.min(position, destinationActivities.length) },
     );
   }
 
-  return <dialog ref={dialog} aria-labelledby="editTitle" onClose={onClose}>
+  return <dialog ref={dialog} aria-labelledby="editTitle" onClose={onClose} onClick={event => {
+    if (event.target !== event.currentTarget) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
+  }}>
     <div className="modal-head"><h2 id="editTitle">{target.index === null ? 'Add' : 'Edit'} · {days[target.day]} {parts.find(part => part.id === target.part)?.name}</h2>
       <button className="xclose" type="button" onClick={onClose} aria-label="Close">×</button></div>
     <div className="modal-body">
       <div className="section-title">1. What are you doing?</div>
-      <div className="emoji-picker">{icons.map(([value, name]) => <button key={value} type="button" className={`choice ${value === icon ? 'selected' : ''}`} aria-label={name} aria-pressed={value === icon} onClick={() => chooseIcon(value, name)}>
-        <span className="big">{value}</span><span>{name}</span>
-      </button>)}</div>
+      <input ref={iconSearch} className="icon-search mini-input" type="search" aria-label="Search icons" placeholder="Search icons (e.g. happy, smile, park)" value={iconQuery} onChange={event => setIconQuery(event.target.value)} />
+      <div className="emoji-picker" aria-label={iconQuery ? 'Matching icons' : 'Popular and calendar icons'}>
+        {visibleIcons.map(entry => {
+          const name = icons.find(([value]) => findOpenMoji(value)?.hexcode === entry.hexcode)?.[1] ?? entry.name;
+          const selected = currentIcon?.hexcode === entry.hexcode;
+          return <button key={entry.hexcode} type="button" className={`choice ${selected ? 'selected' : ''}`} aria-label={name} aria-pressed={selected} onClick={() => chooseIcon(entry.emoji, name)}>
+            <IconPicture emoji={entry.emoji} className="big" /><span>{name}</span>
+          </button>;
+        })}
+      </div>
+      {visibleIcons.length === 0 && <div className="icon-empty">No icons found. Try another word.</div>}
       <label htmlFor="activityName" className="hint">Short label (optional for printing)</label>
       <input id="activityName" className="mini-input" maxLength={25} value={label} onChange={event => setLabel(event.target.value)} />
       <div className="section-title person-section-title">2. Who is doing it?</div>
@@ -284,10 +326,10 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose }: {
           {destinationActivities.map((item, index) => <option key={index} value={index + 1}>After {item.label}</option>)}
         </select></label>
       </div>
-      <div className="modal-foot">
-        {target.index === null ? <span /> : <button className="btn danger" type="button" onClick={onDelete}>Delete</button>}
-        <div className="flex gap-2"><button className="btn" type="button" onClick={onClose}>Cancel</button><button className="btn primary" type="button" onClick={save}>Save ✓</button></div>
-      </div>
+    </div>
+    <div className="modal-foot">
+      {target.index === null ? <span /> : <button className="btn danger" type="button" onClick={onDelete}>Delete</button>}
+      <div className="flex gap-2"><button className="btn" type="button" onClick={onClose}>Cancel</button><button className="btn primary" type="button" onClick={save}>Save ✓</button></div>
     </div>
   </dialog>;
 }
@@ -394,7 +436,7 @@ export default function App() {
     <Legend />
     <div className="intro">Tap an activity to edit it. Drag it to another spot to move it (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
     <Calendar week={week} onEdit={setTarget} onCommit={commitMove} />
-    <p className="smallnote">Each time-of-day row fits its activities · Example activities only · Changes save on this device · A4 landscape print</p>
+    <p className="smallnote">Each time-of-day row fits its activities · Example activities only · Changes save on this device · A4 landscape print · Icons by <a href="https://openmoji.org/">OpenMoji</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>)</p>
     {showBackToTop && <button className="back-to-top" type="button" aria-label="Back to top" title="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })}><span aria-hidden="true">↑</span></button>}
     {target && initialActivity && <ActivityEditor target={target} activity={initialActivity} week={week} onSave={saveActivity} onDelete={deleteActivity} onClose={() => setTarget(null)} />}
     {undoMove && <MoveToast message={undoMove.message} onUndo={() => { setWeek(undoMove.before); setUndoMove(null); }} onDismiss={() => setUndoMove(null)} />}
