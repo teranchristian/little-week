@@ -1,11 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
-  days, icons, parts, people, personIds, readHideWords, readWeek,
+  closestCenter, DndContext, DragOverlay, KeyboardSensor, MouseSensor,
+  pointerWithin, rectIntersection, TouchSensor, useDroppable, useSensor, useSensors,
+  type CollisionDetection, type DragEndEvent, type DragMoveEvent, type DragOverEvent, type DragStartEvent,
+} from '@dnd-kit/core';
+import { defaultAnimateLayoutChanges, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
+  days, findActivity, icons, moveActivity, newActivityId, parts, people, personIds, readHideWords, readWeek,
   sampleWeek, storageKey, wordsStorageKey,
-  type Activity, type PartId, type PersonId, type WeekPlan,
+  type Activity, type ActivityDestination, type ActivityPosition, type PartId, type PersonId, type WeekPlan,
 } from './planner';
 
 interface EditTarget { day: number; part: PartId; index: number | null }
+interface UndoMove { token: number; before: WeekPlan; message: string }
 
 function Face({ id }: { id: PersonId }) {
   const person = people[id];
@@ -25,42 +34,178 @@ function Legend() {
   </div>;
 }
 
-function ActivityCard({ activity, onEdit }: { activity: Activity; onEdit: () => void }) {
-  return <button type="button" className="activity" onClick={onEdit} title={`Edit ${activity.label}`}>
+function slotId(day: number, part: PartId) { return `slot:${day}:${part}`; }
+
+function ActivityContent({ activity }: { activity: Activity }) {
+  return <>
     <span className="activity-emoji" aria-hidden="true">{activity.icon}</span>
     <span className="activity-details"><span className="activity-name">{activity.label}</span><Participants who={activity.who} /></span>
+  </>;
+}
+
+function ActivityCard({ day, part, index, activity, onEdit }: {
+  day: number; part: PartId; index: number; activity: Activity; onEdit: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: activity.id,
+    data: { type: 'activity', day, part, index },
+    animateLayoutChanges: args => args.isSorting || args.wasDragging ? defaultAnimateLayoutChanges(args) : true,
+  });
+  return <button ref={setNodeRef} type="button" className={`activity ${isDragging ? 'is-dragging' : ''}`}
+    style={{ transform: CSS.Transform.toString(transform), transition }}
+    onClick={onEdit} title={`Edit or move ${activity.label}`} {...attributes} {...listeners}>
+    <ActivityContent activity={activity} />
   </button>;
 }
 
 function DayPart({ day, part, activities, onEdit }: {
   day: number; part: typeof parts[number]; activities: Activity[]; onEdit: (target: EditTarget) => void;
 }) {
-  return <section className={`part ${part.id}`} aria-label={`${days[day]} ${part.name}`}>
+  const { setNodeRef, isOver } = useDroppable({ id: slotId(day, part.id), data: { type: 'slot', day, part: part.id } });
+  return <section ref={setNodeRef} className={`part ${part.id} ${isOver ? 'drop-target' : ''}`} aria-label={`${days[day]} ${part.name}`}>
     <div className="part-head"><span className="symbol" aria-hidden="true">{part.emoji}</span>{part.name}</div>
-    <div className="activities" data-count={activities.length}>
-      {activities.map((activity, index) => <ActivityCard key={index} activity={activity} onEdit={() => onEdit({ day, part: part.id, index })} />)}
-    </div>
+    <SortableContext items={activities.map(activity => activity.id)} strategy={verticalListSortingStrategy}>
+      <div className="activities" data-count={activities.length}>
+        {activities.map((activity, index) => <ActivityCard key={activity.id} day={day} part={part.id} index={index} activity={activity} onEdit={() => onEdit({ day, part: part.id, index })} />)}
+      </div>
+    </SortableContext>
     <button type="button" className="add" onClick={() => onEdit({ day, part: part.id, index: null })} title={`Add an activity to ${days[day]} ${part.name}`}>+ Add</button>
   </section>;
 }
 
-function Calendar({ week, onEdit }: { week: WeekPlan; onEdit: (target: EditTarget) => void }) {
+function Calendar({ week, onEdit, onCommit }: {
+  week: WeekPlan; onEdit: (target: EditTarget) => void;
+  onCommit: (before: WeekPlan, after: WeekPlan, activityId: string) => void;
+}) {
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const [dragging, setDragging] = useState<Activity | null>(null);
+  const [preview, setPreview] = useState<WeekPlan | null>(null);
+  const originalWeek = useRef<WeekPlan | null>(null);
+  const activeId = useRef<string | null>(null);
+  const previewWeek = useRef<WeekPlan | null>(null);
+  const previewKey = useRef<string | null>(null);
+  const suppressDragClick = useRef(false);
+
+  const collisionDetection: CollisionDetection = args => {
+    const pointerHits = pointerWithin(args);
+    const cardHits = pointerHits.filter(hit => args.droppableContainers.find(container => container.id === hit.id)?.data.current?.type === 'activity');
+    return cardHits.length ? cardHits : pointerHits.length ? pointerHits : (args.pointerCoordinates ? rectIntersection(args) : closestCenter(args));
+  };
+
+  function dragStart(event: DragStartEvent) {
+    const id = String(event.active.id);
+    const source = findActivity(week, id);
+    if (!source) return;
+    originalWeek.current = week;
+    activeId.current = id;
+    setDragging(week[source.day][source.part][source.index]);
+  }
+
+  function clearDrag() {
+    suppressDragClick.current = true;
+    window.setTimeout(() => { suppressDragClick.current = false; }, 0);
+    setDragging(null);
+    setPreview(null);
+    previewWeek.current = null;
+    previewKey.current = null;
+    originalWeek.current = null;
+    activeId.current = null;
+  }
+
+  function destinationFor(event: DragMoveEvent | DragOverEvent | DragEndEvent): ActivityDestination | undefined {
+    const original = originalWeek.current;
+    const id = activeId.current;
+    const over = event.over;
+    if (!original || !id || !over || String(over.id) === id) return;
+    const source = findActivity(original, id);
+    if (!source) return;
+    const target = over.data.current as (
+      | (ActivityPosition & { type: 'activity' })
+      | ({ day: number; part: PartId; type: 'slot' })
+    ) | undefined;
+    if (!target) return;
+    if (target.type === 'slot') return { day: target.day, part: target.part, index: null };
+    const targetPosition = findActivity(original, String(over.id));
+    if (!targetPosition) return;
+    const draggedCenter = event.active.rect.current.translated
+      ? event.active.rect.current.translated.top + event.active.rect.current.translated.height / 2
+      : over.rect.top;
+    const after = draggedCenter > over.rect.top + over.rect.height / 2;
+    let index = targetPosition.index + Number(after);
+    if (source.day === targetPosition.day && source.part === targetPosition.part && source.index < index) index--;
+    return { day: targetPosition.day, part: targetPosition.part, index };
+  }
+
+  function updatePreview(event: DragMoveEvent | DragOverEvent) {
+    const original = originalWeek.current;
+    const id = activeId.current;
+    const destination = destinationFor(event);
+    if (!original || !id || !destination) return;
+    const source = findActivity(original, id);
+    if (!source) return;
+    if (source.day === destination.day && source.part === destination.part) {
+      if (previewWeek.current) {
+        previewWeek.current = null;
+        previewKey.current = null;
+        setPreview(null);
+      }
+      return;
+    }
+    const key = `${destination.day}:${destination.part}:${destination.index ?? 'end'}`;
+    if (previewKey.current === key) return;
+    const next = moveActivity(original, source, destination);
+    previewWeek.current = next;
+    previewKey.current = key;
+    setPreview(next);
+  }
+
+  function dragEnd(event: DragEndEvent) {
+    const original = originalWeek.current;
+    const id = activeId.current;
+    const source = original && id ? findActivity(original, id) : undefined;
+    const destination = destinationFor(event);
+    if (original && source && id && event.over) {
+      if (destination) onCommit(original, moveActivity(original, source, destination), id);
+      else if (String(event.over.id) === id && previewWeek.current) onCommit(original, previewWeek.current, id);
+    }
+    clearDrag();
+  }
+
+  function edit(target: EditTarget) {
+    if (!suppressDragClick.current) onEdit(target);
+  }
+
+  const visibleWeek = preview ?? week;
   return <section className="scroll" aria-label="Weekly family activities"><div className="calendar">
-    {days.map((day, dayIndex) => <article className="day" key={day}>
-      <div className="day-head">{day}</div>
-      {parts.map(part => <DayPart key={part.id} day={dayIndex} part={part} activities={week[dayIndex][part.id]} onEdit={onEdit} />)}
-    </article>)}
+    <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={dragStart} onDragMove={updatePreview} onDragOver={updatePreview} onDragEnd={dragEnd} onDragCancel={clearDrag}>
+      {days.map((day, dayIndex) => <article className="day" key={day}>
+        <div className="day-head">{day}</div>
+        {parts.map(part => <DayPart key={part.id} day={dayIndex} part={part} activities={visibleWeek[dayIndex][part.id]} onEdit={edit} />)}
+      </article>)}
+      {createPortal(<DragOverlay dropAnimation={null}>{dragging && <div className="activity drag-overlay"><ActivityContent activity={dragging} /></div>}</DragOverlay>, document.body)}
+    </DndContext>
   </div></section>;
 }
 
-function ActivityEditor({ target, activity, onSave, onDelete, onClose }: {
-  target: EditTarget; activity: Activity;
-  onSave: (activity: Activity) => void; onDelete: () => void; onClose: () => void;
+function ActivityEditor({ target, activity, week, onSave, onDelete, onClose }: {
+  target: EditTarget; activity: Activity; week: WeekPlan;
+  onSave: (activity: Activity, destination: ActivityDestination) => void;
+  onDelete: () => void; onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [icon, setIcon] = useState(activity.icon);
   const [label, setLabel] = useState(activity.label);
   const [who, setWho] = useState<PersonId[]>(activity.who);
+  const [destinationDay, setDestinationDay] = useState(target.day);
+  const [destinationPart, setDestinationPart] = useState<PartId>(target.part);
+  const [position, setPosition] = useState(target.index ?? week[target.day][target.part].length);
+  const availableActivities = (day: number, part: PartId) => week[day][part].filter((_, index) =>
+    !(target.index !== null && target.day === day && target.part === part && target.index === index));
+  const destinationActivities = availableActivities(destinationDay, destinationPart);
 
   useEffect(() => { dialog.current?.showModal(); }, []);
 
@@ -77,7 +222,10 @@ function ActivityEditor({ target, activity, onSave, onDelete, onClose }: {
   }
 
   function save() {
-    onSave({ icon, label: label.trim() || icons.find(([value]) => value === icon)?.[1] || 'Activity', who });
+    onSave(
+      { id: activity.id, icon, label: label.trim() || icons.find(([value]) => value === icon)?.[1] || 'Activity', who },
+      { day: destinationDay, part: destinationPart, index: Math.min(position, destinationActivities.length) },
+    );
   }
 
   return <dialog ref={dialog} aria-labelledby="editTitle" onClose={onClose}>
@@ -94,6 +242,23 @@ function ActivityEditor({ target, activity, onSave, onDelete, onClose }: {
       <div className="person-grid">{personIds.map(id => <button key={id} type="button" className={`person-choice ${who.includes(id) ? 'selected' : ''}`} aria-pressed={who.includes(id)} onClick={() => togglePerson(id)}>
         <Face id={id} />{people[id].name}
       </button>)}</div>
+      <div className="section-title destination-section-title">3. Where does it go?</div>
+      <div className="destination-grid">
+        <label className="hint">Day<select className="mini-input" aria-label="Day" value={destinationDay} onChange={event => {
+          const day = Number(event.target.value);
+          setDestinationDay(day);
+          setPosition(availableActivities(day, destinationPart).length);
+        }}>{days.map((day, index) => <option key={day} value={index}>{day}</option>)}</select></label>
+        <label className="hint">Time of day<select className="mini-input" aria-label="Time of day" value={destinationPart} onChange={event => {
+          const part = event.target.value as PartId;
+          setDestinationPart(part);
+          setPosition(availableActivities(destinationDay, part).length);
+        }}>{parts.map(part => <option key={part.id} value={part.id}>{part.name}</option>)}</select></label>
+        <label className="hint destination-position">Position<select className="mini-input" aria-label="Position" value={position} onChange={event => setPosition(Number(event.target.value))}>
+          <option value={0}>First</option>
+          {destinationActivities.map((item, index) => <option key={index} value={index + 1}>After {item.label}</option>)}
+        </select></label>
+      </div>
       <div className="modal-foot">
         {target.index === null ? <span /> : <button className="btn danger" type="button" onClick={onDelete}>Delete</button>}
         <div className="flex gap-2"><button className="btn" type="button" onClick={onClose}>Cancel</button><button className="btn primary" type="button" onClick={save}>Save ✓</button></div>
@@ -102,27 +267,63 @@ function ActivityEditor({ target, activity, onSave, onDelete, onClose }: {
   </dialog>;
 }
 
+function MoveToast({ message, onUndo, onDismiss }: {
+  message: string; onUndo: () => void; onDismiss: () => void;
+}) {
+  return <div className="move-toast" role="status">
+    <span className="move-toast-message" title={message}>{message}</span>
+    <button className="move-toast-undo" type="button" onClick={onUndo}>Undo</button>
+    <button className="move-toast-close" type="button" onClick={onDismiss} aria-label="Dismiss notification">×</button>
+  </div>;
+}
+
 export default function App() {
   const [week, setWeek] = useState<WeekPlan>(readWeek);
   const [hideWords, setHideWords] = useState(readHideWords);
   const [target, setTarget] = useState<EditTarget | null>(null);
+  const [undoMove, setUndoMove] = useState<UndoMove | null>(null);
+  const toastToken = useRef(0);
 
   useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify(week)); } catch { /* Private browsing can block storage. */ } }, [week]);
   useEffect(() => { try { localStorage.setItem(wordsStorageKey, String(hideWords)); } catch { /* Private browsing can block storage. */ } }, [hideWords]);
+  useEffect(() => {
+    if (!undoMove) return;
+    const timeout = window.setTimeout(() => setUndoMove(current => current?.token === undoMove.token ? null : current), 6000);
+    return () => window.clearTimeout(timeout);
+  }, [undoMove]);
 
-  function saveActivity(activity: Activity) {
+  function showMove(before: WeekPlan, after: WeekPlan, id: string) {
+    const from = findActivity(before, id);
+    const to = findActivity(after, id);
+    if (!from || !to || (from.day === to.day && from.part === to.part && from.index === to.index)) {
+      setUndoMove(null);
+      return;
+    }
+    const activity = after[to.day][to.part][to.index];
+    const part = parts.find(item => item.id === to.part)!;
+    setUndoMove({ token: ++toastToken.current, before, message: `${activity.label} moved to ${days[to.day]} ${part.name}` });
+  }
+
+  function commitMove(before: WeekPlan, after: WeekPlan, id: string) {
+    if (before === after) return;
+    setWeek(after);
+    showMove(before, after, id);
+  }
+
+  function saveActivity(activity: Activity, destination: ActivityDestination) {
     if (!target) return;
-    setWeek(current => {
-      const next = structuredClone(current);
-      if (target.index === null) next[target.day][target.part].push(activity);
-      else next[target.day][target.part][target.index] = activity;
-      return next;
-    });
+    const next = structuredClone(week);
+    if (target.index !== null) next[target.day][target.part].splice(target.index, 1);
+    next[destination.day][destination.part].splice(destination.index ?? next[destination.day][destination.part].length, 0, activity);
+    setWeek(next);
+    if (target.index !== null) showMove(week, next, activity.id);
+    else setUndoMove(null);
     setTarget(null);
   }
 
   function deleteActivity() {
     if (!target || target.index === null) return;
+    setUndoMove(null);
     setWeek(current => {
       const next = structuredClone(current);
       next[target.day][target.part].splice(target.index!, 1);
@@ -132,11 +333,14 @@ export default function App() {
   }
 
   function reset() {
-    if (window.confirm('Restore the sample week? Your edits will be replaced.')) setWeek(structuredClone(sampleWeek));
+    if (window.confirm('Restore the sample week? Your edits will be replaced.')) {
+      setUndoMove(null);
+      setWeek(structuredClone(sampleWeek));
+    }
   }
 
   const initialActivity = target && (target.index === null
-    ? { icon: '🛝', label: 'Playground', who: ['ema'] as PersonId[] }
+    ? { id: newActivityId(), icon: '🛝', label: 'Playground', who: ['ema'] as PersonId[] }
     : week[target.day][target.part][target.index]);
 
   return <main className={`shell ${hideWords ? 'hide-words' : ''}`}>
@@ -145,9 +349,10 @@ export default function App() {
       <div className="actions"><button className="btn" type="button" onClick={() => setHideWords(value => !value)}>{hideWords ? '👀 Show words' : '🙈 Hide words'}</button><button className="btn" type="button" onClick={reset}>↺ Reset example</button><button className="btn primary" type="button" onClick={() => window.print()}>🖨️ Print A4</button></div>
     </header>
     <Legend />
-    <div className="intro">Tap an activity to change its emoji or the people doing it. Tap <strong>+</strong> to add another activity. No exact times needed.</div>
-    <Calendar week={week} onEdit={setTarget} />
+    <div className="intro">Tap an activity to edit it. Drag it to another spot to move it (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
+    <Calendar week={week} onEdit={setTarget} onCommit={commitMove} />
     <p className="smallnote">All three time-of-day rows are the same height · Example activities only · Changes save on this device · A4 landscape print</p>
-    {target && initialActivity && <ActivityEditor target={target} activity={initialActivity} onSave={saveActivity} onDelete={deleteActivity} onClose={() => setTarget(null)} />}
+    {target && initialActivity && <ActivityEditor target={target} activity={initialActivity} week={week} onSave={saveActivity} onDelete={deleteActivity} onClose={() => setTarget(null)} />}
+    {undoMove && <MoveToast message={undoMove.message} onUndo={() => { setWeek(undoMove.before); setUndoMove(null); }} onDismiss={() => setUndoMove(null)} />}
   </main>;
 }

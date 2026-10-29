@@ -25,14 +25,46 @@ export const icons = [
 ] as const;
 
 export interface Activity {
+  id: string;
   icon: string;
   label: string;
   who: PersonId[];
 }
 export type DayPlan = Record<PartId, Activity[]>;
 export type WeekPlan = DayPlan[];
+export interface ActivityPosition { day: number; part: PartId; index: number }
+export interface ActivityDestination { day: number; part: PartId; index: number | null }
 
-const activity = (icon: string, label: string, who: PersonId[]): Activity => ({ icon, label, who });
+export function findActivity(week: WeekPlan, id: string): ActivityPosition | undefined {
+  for (let day = 0; day < week.length; day++) {
+    for (const part of parts) {
+      const index = week[day][part.id].findIndex(activity => activity.id === id);
+      if (index !== -1) return { day, part: part.id, index };
+    }
+  }
+}
+
+export function moveActivity(week: WeekPlan, from: ActivityPosition, to: ActivityDestination): WeekPlan {
+  const source = week[from.day]?.[from.part];
+  const destination = week[to.day]?.[to.part];
+  if (!source?.[from.index] || !destination) return week;
+  const sameSlot = from.day === to.day && from.part === to.part;
+  const targetIndex = to.index === null ? destination.length - (sameSlot ? 1 : 0) : to.index;
+  if (sameSlot && from.index === targetIndex) return week;
+
+  const next = structuredClone(week);
+  const [activity] = next[from.day][from.part].splice(from.index, 1);
+  next[to.day][to.part].splice(targetIndex, 0, activity);
+  return next;
+}
+
+export function newActivityId(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `activity-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+const activity = (icon: string, label: string, who: PersonId[]): Activity => ({ id: newActivityId(), icon, label, who });
 const all = [...personIds];
 export const sampleWeek: WeekPlan = [
   { morning: [activity('🏫', 'Daycare', ['ema']), activity('💻', 'Work', ['dad'])], afternoon: [activity('🛝', 'Playground', ['mum', 'ema', 'haru'])], night: [activity('📖', 'Stories', ['dad', 'ema', 'haru'])] },
@@ -59,7 +91,12 @@ export function readWeek(): WeekPlan {
     const saved: unknown = JSON.parse(localStorage.getItem(storageKey) ?? 'null');
     if (Array.isArray(saved) && saved.length === 7 && saved.every(day =>
       day && parts.every(part => Array.isArray(day[part.id]) && day[part.id].every(isActivity)))) {
-      return saved as WeekPlan;
+      const seen = new Set<string>();
+      return (saved as WeekPlan).map(day => Object.fromEntries(parts.map(part => [part.id, day[part.id].map(item => {
+        const id = typeof item.id === 'string' && item.id && !seen.has(item.id) ? item.id : newActivityId();
+        seen.add(id);
+        return { ...item, id };
+      })])) as DayPlan);
     }
   } catch { /* Storage can be unavailable or contain older data. */ }
   return structuredClone(sampleWeek);
