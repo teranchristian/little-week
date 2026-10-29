@@ -233,3 +233,28 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .calendar.short-view .activity-details{flex:0 1 auto;align-items:center;text-align:center}
   .calendar.short-view .people{justify-content:center}
 }
+
+@media print{
+  .activity{flex-direction:row;gap:1.5mm;padding:2mm 1mm;align-items:center;justify-content:center}
+  .activity-emoji,.activities>.activity:only-child .activity-emoji,
+  .hide-words .activity-emoji,.hide-words .activities>.activity:only-child .activity-emoji{
+    display:grid;place-items:center;flex:none;width:14mm;min-width:14mm;height:14mm;min-height:14mm;font-size:50px
+  }
+  .activity-details{flex:0 1 auto;align-items:flex-start;min-width:0;max-width:calc(100% - 15.5mm);gap:1.5mm;text-align:left}
+  .activity-name{font-size:11px;line-height:1.2}
+  .people{justify-content:flex-start;max-width:100%}
+  .people .face,.activities>.activity:only-child .people .face{width:6.5mm;height:6.5mm;font-size:20px}
+  .all-people{font-size:11px}
+  .all-icon{font-size:23px}
+  .calendar.short-view .activity{gap:3mm}
+  .calendar.short-view .activity-emoji,
+  .calendar.short-view .activities>.activity:only-child .activity-emoji{
+    width:18mm;min-width:18mm;height:18mm;min-height:18mm;font-size:64px
+  }
+  .calendar.short-view .activity-details{max-width:calc(100% - 21mm)}
+  .calendar.short-view .activity-name{font-size:15px}
+  .calendar.short-view .people .face,
+  .calendar.short-view .activities>.activity:only-child .people .face{width:8mm;height:8mm;font-size:24px}
+  .calendar.short-view .all-people{font-size:14px}
+  .calendar.short-view .all-icon{font-size:29px}
+}
