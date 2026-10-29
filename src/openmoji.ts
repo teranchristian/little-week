@@ -1,5 +1,5 @@
 import catalog from './openmoji-catalog.json';
-import { familyIcon, previousFamilyIcon } from './planner';
+import { familyIcon, icons, previousFamilyIcon } from './planner';
 
 export interface OpenMojiIcon {
   emoji: string;
@@ -12,6 +12,7 @@ export interface OpenMojiIcon {
 export const openMojiIcons = catalog as OpenMojiIcon[];
 const normalize = (emoji: string) => emoji.replaceAll('\uFE0F', '');
 const byEmoji = new Map(openMojiIcons.map(icon => [normalize(icon.emoji), icon]));
+const pickerNames = new Map<string, string>(icons.map(([emoji, name]) => [normalize(emoji), name.toLowerCase()]));
 const family = byEmoji.get(normalize(familyIcon));
 if (family) byEmoji.set(normalize(previousFamilyIcon), family);
 
@@ -32,9 +33,12 @@ export function searchOpenMoji(query: string): OpenMojiIcon[] {
       const name = icon.name.toLowerCase();
       const nameWords = name.match(/[\p{L}\p{N}]+/gu) ?? [];
       const tagWords = icon.tags.flatMap(tag => tag.match(/[\p{L}\p{N}]+/gu) ?? []);
-      if (!terms.every(term => [...nameWords, ...tagWords].some(word => word.startsWith(term)))) return null;
+      const pickerName = pickerNames.get(normalize(icon.emoji)) ?? '';
+      const pickerWords = pickerName.match(/[\p{L}\p{N}]+/gu) ?? [];
+      if (!terms.every(term => [...nameWords, ...tagWords, ...pickerWords].some(word => word.startsWith(term)))) return null;
       const score = terms.reduce((total, term) => total +
         (name === term ? 12 : nameWords[0]?.startsWith(term) ? 8 : nameWords.some(word => word.startsWith(term)) ? 5 : 0) +
+        (pickerName === term ? 16 : pickerWords[0]?.startsWith(term) ? 10 : pickerWords.some(word => word.startsWith(term)) ? 6 : 0) +
         (tagWords.includes(term) ? 3 : tagWords.some(word => word.startsWith(term)) ? 1 : 0) +
         (icon.group === 'smileys-emotion' && (term.startsWith('happ') || term.startsWith('smil')) ? 4 : 0), 0);
       return { icon, score };
