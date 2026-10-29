@@ -209,3 +209,27 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .hide-words .people{justify-content:center}
   .hide-words .activity-emoji,.hide-words .activities>.activity:only-child .activity-emoji{width:64px;min-width:64px;height:64px;min-height:64px;font-size:60px}
 }
+
+/* Calendar view settings and variable-length rolling view. */
+.calendar{grid-template-columns:repeat(var(--calendar-columns,7),minmax(0,1fr));min-width:calc(var(--calendar-columns,7) * 176px + (var(--calendar-columns,7) - 1) * 9px)}
+.day-head{display:flex;align-items:center;justify-content:center;gap:8px}
+.day-date{font-size:12px;font-weight:650;letter-spacing:0;opacity:.9}
+.settings-intro{margin:0 0 16px;color:var(--muted);font-size:14px;line-height:1.4}
+.week-start-options{border:0;margin:0;padding:0;display:grid;gap:8px}
+.week-start-options legend{padding:0 0 9px;font-size:13px;font-weight:800}
+.week-start-option{display:flex;align-items:center;gap:12px;min-height:64px;border:1px solid var(--border);border-radius:12px;padding:10px 12px;cursor:pointer}
+.week-start-option.selected{border-color:#27826a;background:#edfaf4;box-shadow:inset 0 0 0 1px #27826a}
+.week-start-option input{accent-color:#27826a;width:18px;height:18px;flex:none}
+.week-start-option span{display:grid;gap:2px}
+.week-start-option small{color:var(--muted);font-size:12px}
+.days-to-show{display:grid;gap:4px;margin-top:18px;font-size:13px}
+.days-to-show span{color:var(--muted);font-size:12px}
+.days-to-show select{margin-top:6px}
+.nav-date{margin-left:4px;font-weight:600;opacity:.75}
+@media screen and (max-width:900px){.calendar{min-width:0}.day-head{justify-content:space-between}.day-nav button{white-space:nowrap}}
+@media print{.calendar{grid-template-columns:repeat(var(--calendar-columns,7),minmax(0,1fr));min-width:0}.day-date{font-size:8px}}
+@media screen{
+  .calendar.short-view .activities>.activity{justify-content:center}
+  .calendar.short-view .activity-details{flex:0 1 auto;align-items:center;text-align:center}
+  .calendar.short-view .people{justify-content:center}
+}

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import {
   closestCenter, DndContext, DragOverlay, KeyboardSensor, MouseSensor,
@@ -14,6 +14,7 @@ import {
 } from './planner';
 import { findOpenMoji, openMojiUrl, searchOpenMoji, type OpenMojiIcon } from './openmoji';
 import { imageFromFile, isCustomIcon, readCustomIcons, saveCustomIcons, validateIconFile, type CustomIcon, type IconScope } from './customIcons';
+import { calendarSettingsKey, readCalendarSettings, visibleDays, type CalendarSettings, type VisibleDay, type WeekStart } from './calendarView';
 
 interface EditTarget { day: number; part: PartId; index: number | null }
 interface UndoMove { token: number; before: WeekPlan; message: string }
@@ -102,8 +103,8 @@ function DayPart({ day, part, activities, onEdit }: {
   </section>;
 }
 
-function Calendar({ week, onEdit, onCommit }: {
-  week: WeekPlan; onEdit: (target: EditTarget) => void;
+function Calendar({ week, displayedDays, onEdit, onCommit }: {
+  week: WeekPlan; displayedDays: VisibleDay[]; onEdit: (target: EditTarget) => void;
   onCommit: (before: WeekPlan, after: WeekPlan, activityId: string) => void;
 }) {
   const sensors = useSensors(
@@ -112,7 +113,7 @@ function Calendar({ week, onEdit, onCommit }: {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const [dragging, setDragging] = useState<Activity | null>(null);
-  const [activeDay, setActiveDay] = useState(0);
+  const [activeDay, setActiveDay] = useState(displayedDays[0].index);
   const dayNav = useRef<HTMLElement>(null);
   const [preview, setPreview] = useState<WeekPlan | null>(null);
   const originalWeek = useRef<WeekPlan | null>(null);
@@ -124,8 +125,8 @@ function Calendar({ week, onEdit, onCommit }: {
   useEffect(() => {
     const updateActiveDay = () => {
       const navBottom = dayNav.current?.getBoundingClientRect().bottom ?? 0;
-      let visibleDay = 0;
-      days.forEach((_, index) => {
+      let visibleDay = displayedDays[0].index;
+      displayedDays.forEach(({ index }) => {
         const dayTop = document.getElementById(`day-${index}`)?.getBoundingClientRect().top;
         if (dayTop !== undefined && dayTop <= navBottom + 8) visibleDay = index;
       });
@@ -138,7 +139,7 @@ function Calendar({ week, onEdit, onCommit }: {
       window.removeEventListener('scroll', updateActiveDay);
       window.removeEventListener('resize', updateActiveDay);
     };
-  }, []);
+  }, [displayedDays]);
 
   const collisionDetection: CollisionDetection = args => {
     const pointerHits = pointerWithin(args);
@@ -232,12 +233,12 @@ function Calendar({ week, onEdit, onCommit }: {
   const visibleWeek = preview ?? week;
   return <section className="scroll" aria-label="Weekly family activities">
     <nav ref={dayNav} className="day-nav" aria-label="Jump to day">
-      {days.map((day, index) => <button key={day} type="button" className={activeDay === index ? 'active' : ''} aria-current={activeDay === index ? 'location' : undefined} onClick={() => document.getElementById(`day-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{day}</button>)}
+      {displayedDays.map(({ index, label, date }) => <button key={index} type="button" className={activeDay === index ? 'active' : ''} aria-current={activeDay === index ? 'location' : undefined} onClick={() => document.getElementById(`day-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{label}{date && <span className="nav-date">{date.getDate()}</span>}</button>)}
     </nav>
-    <div className="calendar">
+    <div className={`calendar ${displayedDays.length < 7 ? 'short-view' : ''}`} style={{ '--calendar-columns': displayedDays.length } as CSSProperties}>
     <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={dragStart} onDragMove={updatePreview} onDragOver={updatePreview} onDragEnd={dragEnd} onDragCancel={clearDrag}>
-      {days.map((day, dayIndex) => <article className="day" id={`day-${dayIndex}`} key={day}>
-        <div className="day-head">{day}</div>
+      {displayedDays.map(({ index: dayIndex, label, date }) => <article className="day" id={`day-${dayIndex}`} key={dayIndex}>
+        <div className="day-head"><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>
         {parts.map(part => <DayPart key={part.id} day={dayIndex} part={part} activities={visibleWeek[dayIndex][part.id]} onEdit={edit} />)}
       </article>)}
       {createPortal(<DragOverlay dropAnimation={null}>{dragging && <div className="activity drag-overlay"><ActivityContent activity={dragging} /></div>}</DragOverlay>, document.body)}
@@ -550,11 +551,45 @@ function FamilyEditor({ family, week, onSave, onClose, onAddCustomIcon }: {
   </dialog>;
 }
 
+function CalendarSettingsDialog({ settings, onSave, onClose }: {
+  settings: CalendarSettings; onSave: (settings: CalendarSettings) => void; onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [draft, setDraft] = useState(settings);
+  useEffect(() => { dialog.current?.showModal(); }, []);
+  const options: { value: WeekStart; title: string; description: string }[] = [
+    { value: 'monday', title: 'Monday', description: 'Show Monday through Sunday' },
+    { value: 'sunday', title: 'Sunday', description: 'Show Sunday through Saturday' },
+    { value: 'today', title: 'Today', description: 'Start with today and look ahead' },
+  ];
+  return <dialog ref={dialog} className="calendar-settings-dialog" aria-labelledby="calendarSettingsTitle" onClose={onClose}>
+    <div className="modal-head"><h2 id="calendarSettingsTitle">Calendar view</h2><button className="xclose" type="button" onClick={onClose} aria-label="Close">×</button></div>
+    <div className="modal-body">
+      <p className="settings-intro">Choose the first day to show. Your activities stay on their weekdays.</p>
+      <fieldset className="week-start-options"><legend>Start the calendar on</legend>
+        {options.map(option => <label key={option.value} className={`week-start-option ${draft.start === option.value ? 'selected' : ''}`}>
+          <input type="radio" name="weekStart" value={option.value} checked={draft.start === option.value} onChange={() => setDraft(current => ({ ...current, start: option.value }))} />
+          <span><strong>{option.title}</strong><small>{option.description}</small></span>
+        </label>)}
+      </fieldset>
+      {draft.start === 'today' && <label className="days-to-show" htmlFor="daysToShow"><strong>Days to show</strong><span>Include today, then show up to 6 more days.</span>
+        <select id="daysToShow" className="mini-input" value={draft.daysToShow} onChange={event => setDraft(current => ({ ...current, daysToShow: Number(event.target.value) }))}>
+          {Array.from({ length: 7 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1} {index === 0 ? 'day' : 'days'}</option>)}
+        </select>
+      </label>}
+    </div>
+    <div className="modal-foot"><button className="btn" type="button" onClick={onClose}>Cancel</button><button className="btn primary" type="button" onClick={() => onSave(draft)}>Save view ✓</button></div>
+  </dialog>;
+}
+
 export default function App() {
   const [family, setFamily] = useState<Family>(readFamily);
   const [week, setWeek] = useState<WeekPlan>(readWeek);
   const [customIcons, setCustomIcons] = useState<CustomIcon[]>(readCustomIcons);
   const [hideWords, setHideWords] = useState(readHideWords);
+  const [calendarSettings, setCalendarSettings] = useState(readCalendarSettings);
+  const [editingCalendar, setEditingCalendar] = useState(false);
+  const [today, setToday] = useState(() => new Date());
   const [target, setTarget] = useState<EditTarget | null>(null);
   const [editingFamily, setEditingFamily] = useState(false);
   const [undoMove, setUndoMove] = useState<UndoMove | null>(null);
@@ -564,6 +599,16 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify(week)); } catch { /* Private browsing can block storage. */ } }, [week]);
   useEffect(() => { try { localStorage.setItem(familyStorageKey, JSON.stringify(family)); } catch { /* Private browsing can block storage. */ } }, [family]);
   useEffect(() => { try { localStorage.setItem(wordsStorageKey, String(hideWords)); } catch { /* Private browsing can block storage. */ } }, [hideWords]);
+  useEffect(() => { try { localStorage.setItem(calendarSettingsKey, JSON.stringify(calendarSettings)); } catch { /* Private browsing can block storage. */ } }, [calendarSettings]);
+  useEffect(() => {
+    if (calendarSettings.start !== 'today') return;
+    const timer = window.setInterval(() => {
+      const now = new Date();
+      setToday(current => current.toDateString() === now.toDateString() ? current : now);
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [calendarSettings.start]);
+  const displayedDays = useMemo(() => visibleDays(calendarSettings, today), [calendarSettings, today]);
   useEffect(() => {
     if (!undoMove) return;
     const timeout = window.setTimeout(() => setUndoMove(current => current?.token === undoMove.token ? null : current), 6000);
@@ -661,15 +706,16 @@ export default function App() {
   return <FamilyContext.Provider value={family}><CustomIconsContext.Provider value={customIcons}><main className={`shell ${hideWords ? 'hide-words' : ''} ${showBackToTop ? 'with-back-to-top' : ''}`}>
     <header className="top">
       <div className="titleline"><span className="rainbow" aria-hidden="true">🌈</span><div><h1>{family.name}</h1><p className="sub">The picture shows <strong>what</strong> we're doing. The little faces show <strong>who</strong> is doing it.</p></div></div>
-      <div className="actions"><button className="btn" type="button" onClick={() => setEditingFamily(true)}>👨‍👩‍👧‍👦 Edit family</button><button className="btn" type="button" onClick={() => setHideWords(value => !value)}>{hideWords ? '👀 Show words' : '🙈 Hide words'}</button><button className="btn" type="button" onClick={reset}>↺ Reset example</button><button className="btn primary" type="button" onClick={() => window.print()}>🖨️ Print A4</button></div>
+      <div className="actions"><button className="btn" type="button" onClick={() => setEditingFamily(true)}>👨‍👩‍👧‍👦 Edit family</button><button className="btn" type="button" onClick={() => setEditingCalendar(true)}>📅 Calendar view: {calendarSettings.start === 'today' ? 'Today' : calendarSettings.start === 'sunday' ? 'Sunday' : 'Monday'}</button><button className="btn" type="button" onClick={() => setHideWords(value => !value)}>{hideWords ? '👀 Show words' : '🙈 Hide words'}</button><button className="btn" type="button" onClick={reset}>↺ Reset example</button><button className="btn primary" type="button" onClick={() => window.print()}>🖨️ Print A4</button></div>
     </header>
     <Legend />
     <div className="intro">Tap an activity to edit it. Drag it to another spot to move it (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
-    <Calendar week={week} onEdit={setTarget} onCommit={commitMove} />
+    <Calendar week={week} displayedDays={displayedDays} onEdit={setTarget} onCommit={commitMove} />
     <p className="smallnote">Each time-of-day row fits its activities · Example activities only · Changes save on this device · A4 landscape print · Icons by <a href="https://openmoji.org/">OpenMoji</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>)</p>
     {showBackToTop && <button className="back-to-top" type="button" aria-label="Back to top" title="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })}><span aria-hidden="true">↑</span></button>}
     {target && initialActivity && <ActivityEditor target={target} activity={initialActivity} week={week} onSave={saveActivity} onDelete={deleteActivity} onClose={() => setTarget(null)} onAddCustomIcon={addCustomIcon} />}
     {editingFamily && <FamilyEditor family={family} week={week} onSave={saveFamily} onClose={() => setEditingFamily(false)} onAddCustomIcon={addCustomIcon} />}
+    {editingCalendar && <CalendarSettingsDialog settings={calendarSettings} onSave={settings => { setToday(new Date()); setCalendarSettings(settings); setEditingCalendar(false); }} onClose={() => setEditingCalendar(false)} />}
     {undoMove && <MoveToast message={undoMove.message} onUndo={() => { setWeek(undoMove.before); setUndoMove(null); }} onDismiss={() => setUndoMove(null)} />}
   </main></CustomIconsContext.Provider></FamilyContext.Provider>;
 }
