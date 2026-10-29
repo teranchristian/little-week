@@ -45,11 +45,13 @@ dialog{border:0;border-radius:19px;box-shadow:0 24px 75px #183b3450;width:min(51
 @media screen and (min-width:901px){
   .calendar{grid-template-columns:repeat(7,minmax(0,1fr));min-width:1274px}
   .activities{flex:1 0 auto;min-height:auto}
-  .activities>.activity{flex:1 0 150px;min-height:150px}
-  .activity{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:6px;padding:10px 7px}
+  .activities>.activity{flex:1 0 125px;min-height:125px}
+  .activity{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:6px;padding:8px 7px}
   .hide-words .activity{justify-content:center}
-  .activity-emoji{display:grid;place-items:center;width:64px;min-width:64px;height:64px;min-height:64px;font-size:52px;align-self:center}
-  .hide-words .activity-emoji{font-size:52px}
+  .activity-emoji{display:grid;place-items:center;width:64px;min-width:64px;height:64px;min-height:64px;font-size:60px;align-self:center}
+  .activities>.activity:only-child .activity-emoji{font-size:60px}
+  .hide-words .activity-emoji{font-size:60px}
+  .hide-words .activities>.activity:only-child .activity-emoji{font-size:60px}
   .activity-details{align-items:center;align-self:center;text-align:center}
   .activity-name{font-size:14px}
   .people{justify-content:center}
@@ -89,8 +91,8 @@ dialog{border:0;border-radius:19px;box-shadow:0 24px 75px #183b3450;width:min(51
   .part-head{font-size:13px;padding:0 2px}
   .part-head .symbol{font-size:17px}
   .activities{flex:none;gap:7px}
-  .activities>.activity{flex:none;min-height:150px;flex-direction:row;align-items:center;justify-content:center;gap:6px;padding:10px 12px;border-radius:11px}
-  .activity-emoji,.activities>.activity:only-child .activity-emoji,.hide-words .activities>.activity:only-child .activity-emoji{display:grid;place-items:center;width:64px;min-width:64px;height:64px;min-height:64px;font-size:52px}
+  .activities>.activity{flex:none;min-height:125px;flex-direction:row;align-items:center;justify-content:center;gap:6px;padding:8px 12px;border-radius:11px}
+  .activity-emoji,.activities>.activity:only-child .activity-emoji,.hide-words .activities>.activity:only-child .activity-emoji{display:grid;place-items:center;width:64px;min-width:64px;height:64px;min-height:64px;font-size:60px}
   .activity-details{align-items:center;gap:5px;text-align:center}
   .activity-name{font-size:14px;line-height:1.25}
   .people{justify-content:center}
@@ -99,7 +101,7 @@ dialog{border:0;border-radius:19px;box-shadow:0 24px 75px #183b3450;width:min(51
   .all-people{font-size:14px}
   .all-icon{font-size:27px}
   .hide-words .activity{justify-content:center}
-  .hide-words .activity-emoji{font-size:52px}
+  .hide-words .activity-emoji{font-size:60px}
   .add{min-height:44px;margin:0;font-size:13px;background:#ffffff80}
   .smallnote{line-height:1.4;margin:20px 0 0}
   dialog{width:100vw;max-width:none;height:100dvh;max-height:none;margin:0;border-radius:0;overscroll-behavior:contain}
