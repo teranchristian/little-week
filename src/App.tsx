@@ -8,8 +8,8 @@ import {
 import { defaultAnimateLayoutChanges, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
-  days, defaultFamily, familyIcon, familyStorageKey, findActivity, icons, moveActivity, newActivityId, newPersonId, parts, previousFamilyIcon, readFamily, readHideWords, readWeek,
-  sampleWeekForFamily, storageKey, wordsStorageKey,
+  days, defaultFamily, familyIcon, familyStorageKey, findActivity, icons, moveActivity, newActivityId, newPersonId, parts, previousFamilyIcon, readFamily, readWeek,
+  sampleWeekForFamily, storageKey,
   type Activity, type ActivityDestination, type ActivityPosition, type Family, type PartId, type PersonId, type WeekPlan,
 } from './planner';
 import { findOpenMoji, openMojiUrl, searchOpenMoji, type OpenMojiIcon } from './openmoji';
@@ -294,8 +294,8 @@ function Calendar({ week, displayedDays, onEdit, onCommit }: {
   </div></section>;
 }
 
-function CustomIconDialog({ scope, onSave, onClose }: {
-  scope: IconScope; onSave: (icon: Omit<CustomIcon, 'id'>) => void; onClose: () => void;
+function CustomIconDialog({ scope, existing, onSave, onClose }: {
+  scope: IconScope; existing?: CustomIcon; onSave: (icon: Omit<CustomIcon, 'id'>) => void; onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const fileRequest = useRef(0);
@@ -303,8 +303,8 @@ function CustomIconDialog({ scope, onSave, onClose }: {
   const [source, setSource] = useState<{ file: File; url: string; width: number; height: number } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [name, setName] = useState('');
-  const [tag, setTag] = useState('');
+  const [name, setName] = useState(existing?.name ?? '');
+  const [tag, setTag] = useState(existing?.tag ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const baseScale = source ? fitImageScale(source.width, source.height, 240) : 1;
@@ -352,12 +352,12 @@ function CustomIconDialog({ scope, onSave, onClose }: {
   }
 
   async function save() {
-    if (!source || !name.trim() || !tag.trim()) return;
+    if ((!source && !existing) || !name.trim() || !tag.trim()) return;
     const request = fileRequest.current;
     setBusy(true);
     setError('');
     try {
-      const image = await imageFromFile(source.file, { zoom, x: offset.x, y: offset.y });
+      const image = source ? await imageFromFile(source.file, { zoom, x: offset.x, y: offset.y }) : existing!.image;
       if (request !== fileRequest.current) return;
       onSave({ scope, image, name: name.trim(), tag: tag.trim() });
     }
@@ -366,29 +366,77 @@ function CustomIconDialog({ scope, onSave, onClose }: {
   }
 
   return createPortal(<dialog ref={dialog} className="custom-icon-dialog" aria-labelledby="customIconTitle" onClose={onClose}>
-    <div className="modal-head"><h2 id="customIconTitle">Add {scope === 'family' ? 'family' : 'activity'} icon</h2><button className="xclose" type="button" onClick={onClose} aria-label="Close">×</button></div>
+    <div className="modal-head"><h2 id="customIconTitle">{existing ? 'Edit' : 'Add'} {scope === 'family' ? 'person' : 'activity'} icon</h2><button className="xclose" type="button" onClick={onClose} aria-label="Close">×</button></div>
     <div className="modal-body">
-      <label className="section-title" htmlFor="customIconFile">Image</label>
+      <label className="section-title" htmlFor="customIconFile">{existing ? 'Replace image (optional)' : 'Image'}</label>
       <input id="customIconFile" className="mini-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={event => { const file = event.target.files?.[0]; if (file) void chooseFile(file); }} />
       <p className="hint">PNG, JPG, WebP, or GIF, up to 5 MB. GIFs use the first frame.</p>
-      <div className={`custom-icon-preview ${source ? 'can-drag' : ''}`} role="img" aria-label="Square icon crop preview. Drag to move the image, or use arrow keys." tabIndex={source ? 0 : undefined}
+      <div className={`custom-icon-preview ${source ? 'can-drag' : ''} ${existing && !source ? 'existing-icon' : ''}`} role="img" aria-label="Square icon crop preview. Drag to move the image, or use arrow keys." tabIndex={source ? 0 : undefined}
         onPointerDown={event => { if (!source) return; drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, offsetX: offset.x, offsetY: offset.y }; event.currentTarget.setPointerCapture(event.pointerId); }}
         onPointerMove={move}
         onPointerUp={event => { if (drag.current?.pointerId === event.pointerId) drag.current = null; }}
         onPointerCancel={event => { if (drag.current?.pointerId === event.pointerId) drag.current = null; }}
         onKeyDown={event => { if (!source) return; const step = event.shiftKey ? 20 : 5; const delta = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[event.key] as [number, number] | undefined; if (delta) { event.preventDefault(); setOffset(current => ({ x: clamp(current.x + delta[0], limitX), y: clamp(current.y + delta[1], limitY) })); } }}>
-        {source ? <img src={source.url} alt="" draggable={false} style={{ width: imageWidth, height: imageHeight, transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px)` }} /> : <span>Preview</span>}
+        {source ? <img src={source.url} alt="" draggable={false} style={{ width: imageWidth, height: imageHeight, transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px)` }} /> : existing ? <img src={existing.image} alt="" /> : <span>Preview</span>}
       </div>
       {source && <div className="custom-icon-zoom"><span className="hint">↔ Drag the image in the square to move it ↕</span><label htmlFor="customIconZoom">Size</label><input id="customIconZoom" type="range" min="1" max="3" step="0.05" value={zoom} onChange={event => { const nextZoom = Number(event.target.value); const nextWidth = source.width * baseScale * nextZoom; const nextHeight = source.height * baseScale * nextZoom; setZoom(nextZoom); setOffset(current => ({ x: clamp(current.x, (nextWidth - 240) / 2), y: clamp(current.y, (nextHeight - 240) / 2) })); }} /><output htmlFor="customIconZoom">{Math.round(zoom * 100)}%</output></div>}
       <label className="section-title" htmlFor="customIconName">Name</label>
       <input id="customIconName" className="mini-input" maxLength={25} value={name} onChange={event => setName(event.target.value)} placeholder="e.g. Ballet class" />
       <label className="section-title custom-icon-field" htmlFor="customIconTag">Tag name</label>
-      <input id="customIconTag" className="mini-input" maxLength={25} value={tag} onChange={event => setTag(event.target.value)} placeholder="e.g. ballet" />
-      <p className="hint">Search by name or tag in the {scope === 'family' ? 'family member' : 'activity'} picker.</p>
+      <input id="customIconTag" className="mini-input" maxLength={25} aria-describedby="customIconTagHint" value={tag} onChange={event => setTag(event.target.value)} placeholder="e.g. ballet" />
+      <p id="customIconTagHint" className="hint">Add a word or short phrase to help find this icon in the {scope === 'family' ? 'family member' : 'activity'} picker. Multiple words are searched as one phrase.</p>
       {error && <p className="custom-icon-error" role="alert">{error}</p>}
     </div>
-    <div className="modal-foot"><button className="btn" type="button" onClick={onClose}>Cancel</button><button className="btn primary" type="button" disabled={busy || !source || !name.trim() || !tag.trim()} onClick={() => void save()}>Save icon</button></div>
+    <div className="modal-foot"><button className="btn" type="button" onClick={onClose}>Cancel</button><button className="btn primary" type="button" disabled={busy || (!source && !existing) || !name.trim() || !tag.trim()} onClick={() => void save()}>Save icon</button></div>
   </dialog>, document.body);
+}
+
+function CustomIconsManager({ icons, onAdd, onUpdate, onDelete, onClose }: {
+  icons: CustomIcon[];
+  onAdd: (icon: Omit<CustomIcon, 'id'>) => void;
+  onUpdate: (icon: CustomIcon) => void;
+  onDelete: (icon: CustomIcon) => void;
+  onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [scope, setScope] = useState<IconScope>('family');
+  const [editing, setEditing] = useState<CustomIcon | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [error, setError] = useState('');
+  const shown = icons.filter(icon => icon.scope === scope);
+
+  useEffect(() => { dialog.current?.showModal(); }, []);
+
+  return <dialog ref={dialog} className="custom-icons-manager" aria-labelledby="customIconsTitle" onClose={onClose}>
+    <div className="modal-head"><h2 id="customIconsTitle">Custom icons</h2><button className="xclose" type="button" onClick={onClose} aria-label="Close">×</button></div>
+    <div className="modal-body">
+      <p className="settings-intro">Add or edit picture icons for people and activities. Each group has its own icons.</p>
+      <div className="custom-icon-tabs" role="group" aria-label="Icon type">
+        <button type="button" aria-pressed={scope === 'family'} className={`btn ${scope === 'family' ? 'selected' : ''}`} onClick={() => setScope('family')}>People</button>
+        <button type="button" aria-pressed={scope === 'activity'} className={`btn ${scope === 'activity' ? 'selected' : ''}`} onClick={() => setScope('activity')}>Activities</button>
+      </div>
+      <div className="custom-icon-list">
+        {shown.length ? shown.map(icon => <div className="custom-icon-row" key={icon.id}>
+          <img src={icon.image} alt="" />
+          <span className="custom-icon-details"><strong>{icon.name}</strong><small>#{icon.tag}</small></span>
+          <button className="btn" type="button" onClick={() => setEditing(icon)} aria-label={`Edit ${icon.name}`}>Edit</button>
+          <button className="btn danger" type="button" onClick={() => {
+            setError('');
+            try { onDelete(icon); }
+            catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not delete this icon.'); }
+          }} aria-label={`Delete ${icon.name}`}>Delete</button>
+        </div>) : <p className="icon-empty">No custom {scope === 'family' ? 'people' : 'activity'} icons yet.</p>}
+      </div>
+      {error && <p className="custom-icon-error" role="alert">{error}</p>}
+    </div>
+    <div className="modal-foot"><button className="btn" type="button" onClick={onClose}>Close</button><button className="btn primary" type="button" onClick={() => setAdding(true)}>＋ Add {scope === 'family' ? 'person' : 'activity'} icon</button></div>
+    {(adding || editing) && <CustomIconDialog key={editing?.id ?? scope} scope={editing?.scope ?? scope} existing={editing ?? undefined} onClose={() => { setAdding(false); setEditing(null); }} onSave={draft => {
+      if (editing) onUpdate({ ...editing, ...draft });
+      else onAdd(draft);
+      setAdding(false);
+      setEditing(null);
+    }} />}
+  </dialog>;
 }
 
 function ActivityEditor({ target, activity, week, onSave, onDelete, onClose, onAddCustomIcon }: {
@@ -636,9 +684,9 @@ export default function App() {
   const [family, setFamily] = useState<Family>(readFamily);
   const [week, setWeek] = useState<WeekPlan>(readWeek);
   const [customIcons, setCustomIcons] = useState<CustomIcon[]>(readCustomIcons);
-  const [hideWords, setHideWords] = useState(readHideWords);
   const [calendarSettings, setCalendarSettings] = useState(readCalendarSettings);
   const [editingCalendar, setEditingCalendar] = useState(false);
+  const [editingCustomIcons, setEditingCustomIcons] = useState(false);
   const [today, setToday] = useState(() => new Date());
   const [target, setTarget] = useState<EditTarget | null>(null);
   const [editingFamily, setEditingFamily] = useState(false);
@@ -648,7 +696,6 @@ export default function App() {
 
   useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify(week)); } catch { /* Private browsing can block storage. */ } }, [week]);
   useEffect(() => { try { localStorage.setItem(familyStorageKey, JSON.stringify(family)); } catch { /* Private browsing can block storage. */ } }, [family]);
-  useEffect(() => { try { localStorage.setItem(wordsStorageKey, String(hideWords)); } catch { /* Private browsing can block storage. */ } }, [hideWords]);
   useEffect(() => { try { localStorage.setItem(calendarSettingsKey, JSON.stringify(calendarSettings)); } catch { /* Private browsing can block storage. */ } }, [calendarSettings]);
   useEffect(() => {
     if (calendarSettings.start !== 'today') return;
@@ -722,6 +769,44 @@ export default function App() {
     return added;
   }
 
+  function updateCustomIcon(icon: CustomIcon): void {
+    const next = customIcons.map(item => item.id === icon.id ? icon : item);
+    try {
+      saveCustomIcons(next);
+    } catch {
+      throw new Error('Could not save this icon on this device. Try a smaller image or free up browser storage.');
+    }
+    setCustomIcons(next);
+  }
+
+  function deleteCustomIcon(icon: CustomIcon): void {
+    const inUse = icon.scope === 'family'
+      ? family.members.filter(member => member.emoji === icon.id).length
+      : week.reduce((total, day) => total + parts.reduce((count, part) => count + day[part.id].filter(activity => activity.icon === icon.id).length, 0), 0);
+    const replacement = icon.scope === 'family' ? '🧑' : '🛝';
+    const message = inUse
+      ? `Delete “${icon.name}”? It is used ${inUse} ${inUse === 1 ? 'time' : 'times'} on your planner. Those ${icon.scope === 'family' ? 'people' : 'activities'} will show ${replacement} instead.`
+      : `Delete “${icon.name}” from your custom icons?`;
+    if (!window.confirm(message)) return;
+    try {
+      saveCustomIcons(customIcons.filter(item => item.id !== icon.id));
+    } catch {
+      throw new Error('Could not delete this icon on this device. Try again or free up browser storage.');
+    }
+    setCustomIcons(current => current.filter(item => item.id !== icon.id));
+    if (icon.scope === 'family') {
+      setFamily(current => ({ ...current, members: current.members.map(member => member.emoji === icon.id ? { ...member, emoji: replacement } : member) }));
+    } else {
+      setWeek(current => {
+        const next = structuredClone(current);
+        for (const day of next) for (const part of parts) for (const activity of day[part.id]) {
+          if (activity.icon === icon.id) activity.icon = replacement;
+        }
+        return next;
+      });
+    }
+  }
+
   function deleteActivity() {
     if (!target || target.index === null) return;
     setUndoMove(null);
@@ -753,10 +838,10 @@ export default function App() {
     ? { id: newActivityId(), icon: '🛝', label: 'Playground', who: family.members[0] ? [family.members[0].id] : [] }
     : week[target.day][target.part][target.index]);
 
-  return <FamilyContext.Provider value={family}><CustomIconsContext.Provider value={customIcons}><main className={`shell ${hideWords ? 'hide-words' : ''} ${showBackToTop ? 'with-back-to-top' : ''}`}>
+  return <FamilyContext.Provider value={family}><CustomIconsContext.Provider value={customIcons}><main className={`shell ${showBackToTop ? 'with-back-to-top' : ''}`}>
     <header className="top">
       <div className="titleline"><img className="site-logo" src={`${import.meta.env.BASE_URL}logo/little-week.png`} alt="" /><div><h1>{family.name}</h1><p className="sub">The picture shows <strong>what</strong> we're doing. The little faces show <strong>who</strong> is doing it.</p></div></div>
-      <div className="actions"><button className="btn" type="button" onClick={() => setEditingFamily(true)}>👨‍👩‍👧‍👦 Edit family</button><button className="btn" type="button" onClick={() => setEditingCalendar(true)}>📅 Calendar view: {calendarSettings.start === 'today' ? 'Today' : calendarSettings.start === 'sunday' ? 'Sunday' : 'Monday'}</button><button className="btn" type="button" onClick={() => setHideWords(value => !value)}>{hideWords ? '👀 Show words' : '🙈 Hide words'}</button><button className="btn" type="button" onClick={reset}>↺ Reset example</button><button className="btn primary" type="button" onClick={() => window.print()}>🖨️ Print A4</button></div>
+      <div className="actions"><button className="btn" type="button" onClick={() => setEditingFamily(true)}>👨‍👩‍👧‍👦 Edit family</button><button className="btn" type="button" onClick={() => setEditingCalendar(true)}>📅 Calendar view: {calendarSettings.start === 'today' ? 'Today' : calendarSettings.start === 'sunday' ? 'Sunday' : 'Monday'}</button><button className="btn" type="button" onClick={() => setEditingCustomIcons(true)}>🎨 Custom icons</button><button className="btn" type="button" onClick={reset}>↺ Reset example</button><button className="btn primary" type="button" onClick={() => window.print()}>🖨️ Print A4</button></div>
     </header>
     <Legend />
     <div className="intro">Tap an activity to edit it. Drag it to another spot to move it (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
@@ -766,6 +851,7 @@ export default function App() {
     {target && initialActivity && <ActivityEditor target={target} activity={initialActivity} week={week} onSave={saveActivity} onDelete={deleteActivity} onClose={() => setTarget(null)} onAddCustomIcon={addCustomIcon} />}
     {editingFamily && <FamilyEditor family={family} week={week} onSave={saveFamily} onClose={() => setEditingFamily(false)} onAddCustomIcon={addCustomIcon} />}
     {editingCalendar && <CalendarSettingsDialog settings={calendarSettings} onSave={settings => { setToday(new Date()); setCalendarSettings(settings); setEditingCalendar(false); }} onClose={() => setEditingCalendar(false)} />}
+    {editingCustomIcons && <CustomIconsManager icons={customIcons} onAdd={addCustomIcon} onUpdate={updateCustomIcon} onDelete={deleteCustomIcon} onClose={() => setEditingCustomIcons(false)} />}
     {undoMove && <MoveToast message={undoMove.message} onUndo={() => { setWeek(undoMove.before); setUndoMove(null); }} onDismiss={() => setUndoMove(null)} />}
   </main></CustomIconsContext.Provider></FamilyContext.Provider>;
 }

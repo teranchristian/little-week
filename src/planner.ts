@@ -117,7 +117,6 @@ export function sampleWeekForFamily(family: Family): WeekPlan {
 }
 
 export const storageKey = 'our-week-emoji-v1';
-export const wordsStorageKey = 'our-week-show-words-v1';
 
 function isActivity(value: unknown): value is Activity {
   if (!value || typeof value !== 'object') return false;
@@ -141,9 +140,4 @@ export function readWeek(): WeekPlan {
     }
   } catch { /* Storage can be unavailable or contain older data. */ }
   return sampleWeekForFamily(readFamily());
-}
-
-export function readHideWords(): boolean {
-  try { return localStorage.getItem(wordsStorageKey) === 'true'; }
-  catch { return false; }
 }
