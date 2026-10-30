@@ -352,6 +352,10 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .activity-name{font-size:var(--screen-activity-label-size)}
   .activity-details{gap:3px}
 }
+@media screen and (min-width:901px){
+  /* Share each row's available height across every card, regardless of activity count. */
+  .shell:not(.fullscreen-calendar) .activities>.activity{flex:1 0 auto}
+}
 
 /* Keep all seven days visible on tablet landscape screens. */
 @media screen and (min-width:901px) and (max-width:1200px){
