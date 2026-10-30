@@ -81,7 +81,40 @@ function ActivityCard({ day, part, index, activity, onEdit, onDelete, dropPrevie
     id: activity.id,
     data: { type: 'activity', day, part, index },
   });
-  return <div ref={setNodeRef} className={`activity ${isDragging ? 'is-dragging' : ''} ${dropPreview?.id === activity.id ? `drop-${dropPreview.mode}` : ''}`} style={{ '--people-count': Math.max(1, activity.who.length) } as CSSProperties}>
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card || !card.closest('.simultaneous-cards')) return;
+    const button = card.querySelector<HTMLElement>('.activity-open');
+    const icon = card.querySelector<HTMLElement>('.activity-emoji');
+    const name = card.querySelector<HTMLElement>('.activity-name');
+    const people = card.querySelector<HTMLElement>('.people');
+    if (!button || !icon || !people) return;
+    const update = () => {
+      const faces = people.querySelectorAll<HTMLElement>('.face');
+      if (faces.length < 2 || getComputedStyle(people).flexDirection !== 'column') {
+        card.classList.remove('stack-top');
+        return;
+      }
+      const faceHeight = faces[0].offsetHeight;
+      const faceGap = parseFloat(getComputedStyle(people).rowGap) || 0;
+      const buttonGap = parseFloat(getComputedStyle(button).rowGap) || 0;
+      const details = card.querySelector<HTMLElement>('.activity-details');
+      const detailsGap = name?.offsetHeight ? (parseFloat(getComputedStyle(details!).rowGap) || 0) : 0;
+      // The centred layout has a spacer on each side of the icon and details.
+      const baseline = icon.offsetHeight + (name?.offsetHeight || 0) + faceHeight + 3 * buttonGap + detailsGap;
+      const remainingFaces = (faces.length - 1) * (faceHeight + faceGap);
+      card.classList.toggle('stack-top', remainingFaces > (button.clientHeight - baseline) / 2);
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(button);
+    observer.observe(people);
+    update();
+    window.addEventListener('beforeprint', update);
+    window.addEventListener('afterprint', update);
+    return () => { observer.disconnect(); window.removeEventListener('beforeprint', update); window.removeEventListener('afterprint', update); };
+  }, [activity.who, activity.icon, activity.label]);
+  return <div ref={node => { cardRef.current = node; setNodeRef(node); }} className={`activity ${isDragging ? 'is-dragging' : ''} ${dropPreview?.id === activity.id ? `drop-${dropPreview.mode}` : ''}`} style={{ '--people-count': Math.max(1, activity.who.length) } as CSSProperties}>
     <button type="button" className="activity-open" style={{ transform: dropPreview && dropPreview.mode !== 'group' ? CSS.Transform.toString(transform) : undefined, transition }} onClick={onEdit}
       title={`Edit or move ${activity.label}`} {...attributes} {...listeners}>
       <ActivityContent activity={activity} />

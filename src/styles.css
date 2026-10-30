@@ -644,3 +644,67 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .simultaneous-cards .activity-open{grid-template-rows:auto auto 1fr}
   .simultaneous-cards .activity{--activity-face-min:min(64px, 100cqw)}
 }
+
+/* Centre the whole activity when it fits; keep its beginning visible when it doesn't. */
+@media screen and (min-width:901px), print{
+  .simultaneous-cards .activity-open,
+  .shell:not(.fullscreen-calendar) .simultaneous-cards .activity-open,
+  .activities > .activity .activity-open{
+    display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:4px;padding:0
+  }
+  .simultaneous-cards .activity-details,
+  .shell:not(.fullscreen-calendar) .simultaneous-cards .activity-details{
+    display:flex;flex:none;flex-direction:column;align-items:center;gap:3px
+  }
+  .simultaneous-cards .people{align-self:center}
+}
+@media screen{
+  .fullscreen-calendar .simultaneous-cards .activity-open,
+  .fullscreen-calendar .activities > .activity .activity-open{
+    display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:4px;padding:0
+  }
+  .fullscreen-calendar .simultaneous-cards .activity-details{
+    display:flex;flex:none;flex-direction:column;align-items:center;gap:3px
+  }
+  .fullscreen-calendar .simultaneous-cards .people{align-self:center}
+}
+
+/* Align the first face across vertical cards and reserve room for the rest. */
+@media screen and (min-width:901px), print{
+  .simultaneous-cards > .activity{--stack-gap:4px}
+  .simultaneous-cards > .activity .people{flex-direction:column;flex-wrap:nowrap;justify-content:flex-start}
+  .simultaneous-cards > .activity:has(.people .face) .people{height:var(--stack-face-height);flex:none}
+  .simultaneous-cards > .activity:has(.people .face) .activity-open,
+  .shell:not(.fullscreen-calendar) .simultaneous-cards > .activity:has(.people .face) .activity-open{justify-content:flex-start}
+  .simultaneous-cards > .activity:has(.people .face) .activity-open::before,
+  .simultaneous-cards > .activity:has(.people .face) .activity-open::after{content:'';flex:1 1 0;min-height:0}
+  .simultaneous-cards > .activity:has(.people .face) .activity-open::after{
+    min-height:calc((var(--people-count) - 1) * (var(--stack-face-height) + var(--stack-gap)))
+  }
+}
+@media screen and (min-width:901px){
+  .shell:not(.fullscreen-calendar) .simultaneous-cards > .activity{--stack-face-height:55px}
+}
+@media screen{
+  .fullscreen-calendar .simultaneous-cards > .activity{--stack-face-height:max(55px, min(72px, 96cqw));--stack-gap:4px}
+  .fullscreen-calendar .simultaneous-cards > .activity .people{flex-direction:column;flex-wrap:nowrap;justify-content:flex-start}
+  .fullscreen-calendar .simultaneous-cards > .activity:has(.people .face) .people{height:var(--stack-face-height);flex:none}
+  .fullscreen-calendar .simultaneous-cards > .activity:has(.people .face) .activity-open{justify-content:flex-start}
+  .fullscreen-calendar .simultaneous-cards > .activity:has(.people .face) .activity-open::before,
+  .fullscreen-calendar .simultaneous-cards > .activity:has(.people .face) .activity-open::after{content:'';flex:1 1 0;min-height:0}
+  .fullscreen-calendar .simultaneous-cards > .activity:has(.people .face) .activity-open::after{
+    min-height:calc((var(--people-count) - 1) * (var(--stack-face-height) + var(--stack-gap)))
+  }
+}
+@media print{
+  .simultaneous-cards > .activity{--stack-face-height:max(min(64px, 100cqw), min(8mm, 75cqw));--stack-gap:1mm}
+}
+@media screen and (min-width:901px), print{
+  .simultaneous-cards > .activity.stack-top .activity-open::before{display:none}
+  .simultaneous-cards > .activity.stack-top .activity-open::after{flex-grow:0}
+}
+@media screen{
+  .fullscreen-calendar .simultaneous-cards > .activity.stack-top .activity-open::before{display:none}
+  .fullscreen-calendar .simultaneous-cards > .activity.stack-top .activity-open::after{flex-grow:0}
+}
+
