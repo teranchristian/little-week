@@ -1,14 +1,43 @@
-export interface Person { id: string; name: string; emoji: string }
-export interface Family { name: string; members: Person[] }
+export type FamilyRole = 'dad' | 'mum' | 'child';
+export type FamilyGroup = 'family' | 'kids' | 'parents';
+export interface Person { id: string; name: string; emoji: string; role?: FamilyRole }
+export interface Family { name: string; members: Person[]; groupIcons?: Record<FamilyGroup, string> }
+export const defaultGroupIcons: Record<FamilyGroup, string> = { family: 'auto', kids: 'auto', parents: 'auto' };
+export function memberRole(member: Person): FamilyRole {
+  if (member.role) return member.role;
+  if (member.id === 'dad' || /^(dad|father|papa)$/i.test(member.name)) return 'dad';
+  if (member.id === 'mum' || /^(mum|mom|mother|mama)$/i.test(member.name)) return 'mum';
+  return 'child';
+}
+export type ParticipantToken = { kind: 'person'; id: string } | { kind: 'group'; group: FamilyGroup };
+export function participantTokens(who: string[], members: Person[]): ParticipantToken[] {
+  const selected = new Set(who);
+  if (members.length > 1 && members.every(member => selected.has(member.id))) return [{ kind: 'group', group: 'family' }];
+  const kids = members.filter(member => memberRole(member) === 'child');
+  const parents = members.filter(member => memberRole(member) !== 'child');
+  const groups: FamilyGroup[] = [];
+  if (kids.length > 1 && kids.every(member => selected.has(member.id))) groups.push('kids');
+  if (parents.length > 1 && parents.every(member => selected.has(member.id))) groups.push('parents');
+  const emitted = new Set<FamilyGroup>();
+  return members.flatMap(member => {
+    if (!selected.has(member.id)) return [];
+    const group = groups.find(value => value === 'kids' ? memberRole(member) === 'child' : memberRole(member) !== 'child');
+    if (!group) return [{ kind: 'person', id: member.id } as ParticipantToken];
+    if (emitted.has(group)) return [];
+    emitted.add(group);
+    return [{ kind: 'group', group } as ParticipantToken];
+  });
+}
 export type PersonId = string;
 export const defaultFamily: Family = {
   name: 'Little Week',
   members: [
-    { id: 'dad', name: 'Dad', emoji: '👨' },
-    { id: 'mum', name: 'Mum', emoji: '👩' },
-    { id: 'child-1', name: 'Child 1', emoji: '👧' },
-    { id: 'child-2', name: 'Child 2', emoji: '👶' },
+    { id: 'dad', name: 'Dad', emoji: '👨', role: 'dad' },
+    { id: 'mum', name: 'Mum', emoji: '👩', role: 'mum' },
+    { id: 'child-1', name: 'Child 1', emoji: '👧', role: 'child' },
+    { id: 'child-2', name: 'Child 2', emoji: '👶', role: 'child' },
   ],
+  groupIcons: { ...defaultGroupIcons },
 };
 export const familyStorageKey = 'our-week-family-v1';
 
@@ -22,7 +51,10 @@ export function readFamily(): Family {
           member && typeof member.id === 'string' && member.id && typeof member.name === 'string' &&
           member.name.trim() && typeof member.emoji === 'string' && member.emoji.trim()) &&
         new Set(family.members.map(member => member.id)).size === family.members.length) {
-        return { name: family.name === 'Our Week' ? defaultFamily.name : family.name, members: family.members };
+        return { name: family.name === 'Our Week' ? defaultFamily.name : family.name,
+          members: family.members.map(member => ({ ...member, role: ['dad', 'mum', 'child'].includes(member.role ?? '') ? member.role : memberRole({ ...member, role: undefined }) })),
+          groupIcons: { ...defaultGroupIcons, ...Object.fromEntries(Object.entries(family.groupIcons ?? {}).filter(([key, value]) =>
+            ['family', 'kids', 'parents'].includes(key) && typeof value === 'string' && value.trim())) } };
       }
     }
   } catch { /* Storage can be unavailable or contain older data. */ }
@@ -77,7 +109,7 @@ export function sectionLayout(activities: Activity[]) {
 }
 
 // Saved calendars may exceed newer limits; edits can repair them without losing data.
-export function calendarLimitError(before: WeekPlan, after: WeekPlan): string | null {
+export function calendarLimitError(before: WeekPlan, after: WeekPlan, members?: Person[]): string | null {
   for (let day = 0; day < after.length; day++) for (const part of parts) {
     const oldItems = before[day][part.id];
     const items = after[day][part.id];
@@ -91,8 +123,10 @@ export function calendarLimitError(before: WeekPlan, after: WeekPlan): string | 
       return 'Only 2 activities can be side by side in a group.';
     for (const item of items) {
       const oldItem = before.flatMap(dayPlan => parts.flatMap(dayPart => dayPlan[dayPart.id])).find(old => old.id === item.id);
-      if (item.who.length > Math.max(maxPeoplePerActivity, oldItem?.who.length ?? 0))
-        return 'Choose up to 4 people for an activity.';
+      const count = members ? participantTokens(item.who, members).length : item.who.length;
+      const oldCount = oldItem ? (members ? participantTokens(oldItem.who, members).length : oldItem.who.length) : 0;
+      if (count > Math.max(maxPeoplePerActivity, oldCount))
+        return 'Choose up to 4 pictures for an activity.';
     }
   }
   return null;
@@ -105,12 +139,12 @@ export function sortGroupedActivities(activities: Activity[], members: Person[])
   };
   return [...activities].sort((a, b) => rank(a) - rank(b) || a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
 }
-export function printActivityWeight(activities: Activity[]): number {
+export function printActivityWeight(activities: Activity[], members?: Person[]): number {
   const groups = new Map<string, number>();
   let weight = 0;
   for (const activity of activities) {
     if (!activity.simultaneousId) weight++;
-    else groups.set(activity.simultaneousId, Math.max(groups.get(activity.simultaneousId) ?? 0, activity.who.length));
+    else groups.set(activity.simultaneousId, Math.max(groups.get(activity.simultaneousId) ?? 0, members ? participantTokens(activity.who, members).length : activity.who.length));
   }
   for (const people of groups.values()) weight += 1 + Math.max(0, people - 1) * 0.25;
   return weight;

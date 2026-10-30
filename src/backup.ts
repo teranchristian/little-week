@@ -34,6 +34,12 @@ export function parseBackup(text: string): PlannerBackup {
   }
   const memberIds = new Set(family.members.map(member => member.id));
   if (memberIds.size !== family.members.length) throw new Error('The backup has duplicate family members.');
+  const groupIcons = family.groupIcons;
+  if (family.members.some(member => member.role !== undefined && !['dad', 'mum', 'child'].includes(member.role as string)) ||
+    (groupIcons !== undefined && (!record(groupIcons) ||
+      !['family', 'kids', 'parents'].every(group => typeof groupIcons[group] === 'string' && !!(groupIcons[group] as string).trim())))) {
+    throw new Error('The backup has invalid family roles or group icons.');
+  }
   if (!record(calendarSettings) || !['monday', 'sunday', 'today'].includes(calendarSettings.start as string) ||
     !Number.isInteger(calendarSettings.daysToShow) || (calendarSettings.daysToShow as number) < 1 ||
     (calendarSettings.daysToShow as number) > 7) {
@@ -49,6 +55,10 @@ export function parseBackup(text: string): PlannerBackup {
   if (iconIds.size !== customIcons.length) throw new Error('The backup has duplicate custom icons.');
   if (family.members.some(member => member.emoji.startsWith('custom:') && !customIcons.some(icon => icon.id === member.emoji && icon.scope === 'family'))) {
     throw new Error('The backup is missing a family icon.');
+  }
+  if (groupIcons && Object.values(groupIcons).some(icon => typeof icon === 'string' && icon.startsWith('custom:') &&
+    !customIcons.some(custom => custom.id === icon && custom.scope === 'family'))) {
+    throw new Error('The backup is missing a family group icon.');
   }
   if (!Array.isArray(week) || week.length !== 7 || !week.every(day => record(day) && parts.every(part => {
     const activities = day[part.id];

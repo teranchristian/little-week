@@ -70,7 +70,7 @@ test('four faces fit; a fifth is rejected while older entries can be edited', ()
   initial[0].morning = [{ id: 'a', icon: '🏠', label: 'a', who: ['1', '2', '3', '4'] }];
   const five = structuredClone(initial);
   five[0].morning[0].who.push('5');
-  assert.match(calendarLimitError(initial, five)!, /up to 4 people/);
+  assert.match(calendarLimitError(initial, five)!, /up to 4 pictures/);
   const edited = structuredClone(five);
   edited[0].morning[0].label = 'edited';
   assert.equal(calendarLimitError(five, edited), null);

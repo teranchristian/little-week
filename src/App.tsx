@@ -7,9 +7,9 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import {
-  calendarLimitError, maxActivitiesPerSection, maxPeoplePerActivity, sectionLayout, days, defaultFamily, familyIcon, familyStorageKey, findActivity, groupActivity, icons, moveActivity, newActivityId, newPersonId, parts, previousFamilyIcon, readFamily, readWeek,
+  calendarLimitError, maxActivitiesPerSection, maxPeoplePerActivity, sectionLayout, days, defaultFamily, defaultGroupIcons, familyIcon, familyStorageKey, findActivity, groupActivity, icons, memberRole, moveActivity, newActivityId, newPersonId, participantTokens, parts, previousFamilyIcon, readFamily, readWeek,
   printActivityWeight, sampleWeekForFamily, sortGroupedActivities, storageKey,
-  type Activity, type ActivityDestination, type ActivityPosition, type Family, type PartId, type PersonId, type WeekPlan,
+  type Activity, type ActivityDestination, type ActivityPosition, type Family, type FamilyGroup, type PartId, type PersonId, type WeekPlan,
 } from './planner';
 import { findOpenMoji, openMojiUrl, searchOpenMoji, type OpenMojiIcon } from './openmoji';
 import { CSS } from '@dnd-kit/utilities';
@@ -35,9 +35,33 @@ function Face({ id }: { id: PersonId }) {
 }
 
 function Participants({ who }: { who: PersonId[] }) {
+  const family = useContext(FamilyContext);
+  const tokens = participantTokens(who, family.members);
   return <span className="people">
-    {who.map(id => <Face key={id} id={id} />)}
+    {tokens.map(token => token.kind === 'person' ? <Face key={token.id} id={token.id} /> : <GroupFace key={token.group} group={token.group} />)}
   </span>;
+}
+
+function GroupPicture({ group, className, iconOverride }: { group: FamilyGroup; className: string; iconOverride?: string }) {
+  const family = useContext(FamilyContext);
+  const customIcons = useContext(CustomIconsContext);
+  const icon = iconOverride ?? family.groupIcons?.[group] ?? 'auto';
+  if (icon !== 'auto') {
+    const custom = customIcons.find(item => item.id === icon && item.scope === 'family');
+    const url = openMojiUrl(icon);
+    return <span className={className} aria-hidden="true">{custom ? <img src={custom.image} alt="" /> : url ? <img src={url} alt="" /> : icon}</span>;
+  }
+  const members = family.members.filter(member => group === 'family' || (group === 'kids' ? memberRole(member) === 'child' : memberRole(member) !== 'child'));
+  if (!members.length) return <span className={className} aria-hidden="true">{group === 'kids' ? '🧒' : '🧑'}</span>;
+  const columns = Math.ceil(Math.sqrt(members.length));
+  return <span className={`${className} family-picture`} aria-hidden="true" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${Math.ceil(members.length / columns)}, minmax(0, 1fr))` }}>
+    {members.map(person => <span key={person.id} className="family-picture-face" style={{ fontSize: `${Math.min(.42, .8 / columns)}em` }}><MemberEmoji emoji={person.emoji} /></span>)}
+  </span>;
+}
+
+function GroupFace({ group }: { group: FamilyGroup }) {
+  const name = { family: 'Family', kids: 'Kids', parents: 'Parents' }[group];
+  return <span className="face group-face" title={name} aria-label={name}><GroupPicture group={group} className="group-face-picture" /></span>;
 }
 
 function Legend() {
@@ -57,17 +81,12 @@ function ActivityContent({ activity }: { activity: Activity }) {
 }
 
 function IconPicture({ emoji, className }: { emoji: string; className: string }) {
-  const members = useContext(FamilyContext).members;
   const customIcons = useContext(CustomIconsContext);
   if (isCustomIcon(emoji)) {
     const custom = customIcons.find(item => item.id === emoji);
     return <span className={className} aria-hidden="true">{custom ? <img src={custom.image} alt="" /> : '🖼️'}</span>;
   }
-  const isFamily = emoji === familyIcon || emoji === previousFamilyIcon;
-  const columns = Math.ceil(Math.sqrt(members.length));
-  if (isFamily) return <span className={`${className} family-picture`} aria-hidden="true" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${Math.ceil(members.length / columns)}, minmax(0, 1fr))` }}>
-    {members.map(person => <span key={person.id} className="family-picture-face" style={{ fontSize: `${Math.min(.42, .8 / columns)}em` }}><MemberEmoji emoji={person.emoji} /></span>)}
-  </span>;
+  if (emoji === familyIcon || emoji === previousFamilyIcon) return <GroupPicture group="family" className={className} />;
   const url = openMojiUrl(emoji);
   return <span className={className} aria-hidden="true">{url ? <img src={url} alt="" /> : emoji}</span>;
 }
@@ -123,7 +142,8 @@ function ActivityCard({ day, part, index, activity, onEdit, onDelete, dropPrevie
     window.addEventListener('afterprint', update);
     return () => { observer.disconnect(); window.removeEventListener('beforeprint', update); window.removeEventListener('afterprint', update); };
   }, [activity.who, activity.icon, activity.label]);
-  return <div ref={node => { cardRef.current = node; setNodeRef(node); }} className={`activity ${isDragging ? 'is-dragging' : ''} ${dropPreview?.id === activity.id ? `drop-${dropPreview.mode}` : ''}`} style={{ '--people-count': Math.max(1, activity.who.length) } as CSSProperties}>
+  const peopleCount = participantTokens(activity.who, useContext(FamilyContext).members).length;
+  return <div ref={node => { cardRef.current = node; setNodeRef(node); }} className={`activity ${isDragging ? 'is-dragging' : ''} ${dropPreview?.id === activity.id ? `drop-${dropPreview.mode}` : ''}`} style={{ '--people-count': Math.max(1, peopleCount) } as CSSProperties}>
     <button type="button" className="activity-open" style={{ transform: dropPreview && dropPreview.mode !== 'group' ? CSS.Transform.toString(transform) : undefined, transition }} onClick={onEdit}
       title={`Edit or move ${activity.label}`} {...attributes} {...listeners}>
       <ActivityContent activity={activity} />
@@ -155,7 +175,7 @@ function DayPart({ day, part, activities, onEdit, onDelete, dropPreview, draggin
   const members = useContext(FamilyContext).members;
   const layout = sectionLayout(activities);
   const sectionFull = layout.slots >= maxActivitiesPerSection;
-  const overLimit = layout.slots > maxActivitiesPerSection || layout.groupCount > 1 || layout.largestGroup > 2 || activities.some(item => item.who.length > maxPeoplePerActivity);
+  const overLimit = layout.slots > maxActivitiesPerSection || layout.groupCount > 1 || layout.largestGroup > 2 || activities.some(item => participantTokens(item.who, members).length > maxPeoplePerActivity);
   const { setNodeRef, isOver } = useDroppable({ id: slotId(day, part.id), data: { type: 'slot', day, part: part.id } });
   return <section ref={setNodeRef} className={`part ${part.id} ${isOver ? 'drop-target' : ''}`} data-over-limit={overLimit ? 'true' : undefined} aria-label={`${days[day]} ${part.name}`}>
     <div className="part-head"><span className="symbol" aria-hidden="true">{part.emoji}</span>{part.name}</div>
@@ -394,13 +414,14 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
   });
 
   const visibleWeek = week;
-  const printRowWeights = parts.map(part => Math.max(0, ...displayedDays.map(({ index }) => printActivityWeight(visibleWeek[index][part.id]))) + 0.4);
+  const members = useContext(FamilyContext).members;
+  const printRowWeights = parts.map(part => Math.max(0, ...displayedDays.map(({ index }) => printActivityWeight(visibleWeek[index][part.id], members))) + 0.4);
   const printRowTotal = printRowWeights.reduce((total, weight) => total + weight, 0);
   const printRowHeights = Object.fromEntries(parts.map((part, index) =>
     [`--print-${part.id}-height`, `${(183 * printRowWeights[index] / printRowTotal).toFixed(2)}mm`]
   ));
   const fullscreenRowWeights = Object.fromEntries(parts.map(part =>
-    [`--fullscreen-${part.id}-weight`, `${Math.max(0, ...displayedDays.map(({ index: day }) => visibleWeek[day][part.id].length)) + 0.4}fr`]
+    [`--fullscreen-${part.id}-weight`, `${Math.max(0, ...displayedDays.map(({ index: day }) => sectionLayout(visibleWeek[day][part.id]).slots)) + 0.4}fr`]
   ));
   return <>
     <div className="desktop-day-bar" aria-hidden="true">
@@ -648,9 +669,20 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose, onA
   }
 
   function togglePerson(id: PersonId) {
-    setWho(current => current.includes(id)
-      ? current.filter(person => person !== id)
-      : current.length >= maxPeoplePerActivity ? current : members.map(person => person.id).filter(person => current.includes(person) || person === id));
+    setWho(current => {
+      const next = current.includes(id) ? current.filter(person => person !== id) : members.map(person => person.id).filter(person => current.includes(person) || person === id);
+      return participantTokens(next, members).length <= maxPeoplePerActivity ? next : current;
+    });
+  }
+
+  function toggleGroup(group: FamilyGroup) {
+    const ids = members.filter(member => group === 'family' || (group === 'kids' ? memberRole(member) === 'child' : memberRole(member) !== 'child')).map(member => member.id);
+    if (!ids.length) return;
+    setWho(current => {
+      const selected = ids.every(id => current.includes(id));
+      const next = selected ? current.filter(id => !ids.includes(id)) : members.map(member => member.id).filter(id => current.includes(id) || ids.includes(id));
+      return participantTokens(next, members).length <= maxPeoplePerActivity ? next : current;
+    });
   }
 
   function save() {
@@ -693,12 +725,14 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose, onA
       {visibleIcons.length === 0 && visibleCustomIcons.length === 0 && <div className="icon-empty">No icons found. Try another word.</div>}
       <label htmlFor="activityName" className="hint">Short label (optional for printing)</label>
       <input id="activityName" className="mini-input" maxLength={25} value={label} onChange={event => setLabel(event.target.value)} />
-      <div className="section-title person-section-title person-section-heading">2. Who is doing it?
-        <button className="select-all-link" type="button" aria-label="Select up to four family members" onClick={() => setWho(members.slice(0, maxPeoplePerActivity).map(person => person.id))}>up to 4</button>
-      </div>
-      <p className={who.length >= maxPeoplePerActivity ? 'people-limit-warning' : 'hint'} role={who.length >= maxPeoplePerActivity ? 'status' : undefined}>
-        {who.length >= maxPeoplePerActivity ? '4 people selected — that’s the limit. Deselect someone to choose another.' : 'Choose up to 4 people.'}
+      <div className="section-title person-section-title person-section-heading">2. Who is doing it?</div>
+      <p className={participantTokens(who, members).length >= maxPeoplePerActivity ? 'people-limit-warning' : 'hint'} role={participantTokens(who, members).length >= maxPeoplePerActivity ? 'status' : undefined}>
+        Choose up to 4 pictures. A complete family, kids, or parents group counts as one.
       </p>
+      <div className="activity-group-choices">{(['family', 'kids', 'parents'] as const).map(group => {
+        const ids = members.filter(member => group === 'family' || (group === 'kids' ? memberRole(member) === 'child' : memberRole(member) !== 'child')).map(member => member.id);
+        return <button key={group} type="button" className={`btn ${ids.length && ids.every(id => who.includes(id)) ? 'selected' : ''}`} aria-pressed={!!ids.length && ids.every(id => who.includes(id))} disabled={!ids.length} onClick={() => toggleGroup(group)}><GroupFace group={group} />{group === 'kids' ? 'Kids' : group === 'parents' ? 'Parents' : 'Family'}</button>;
+      })}</div>
       <div className="person-grid">{members.map(person => <button key={person.id} type="button" className={`person-choice ${who.includes(person.id) ? 'selected' : ''}`} aria-pressed={who.includes(person.id)} onClick={() => togglePerson(person.id)}>
         <Face id={person.id} />{person.name}
       </button>)}</div>
@@ -755,6 +789,7 @@ function FamilyEditor({ family, week, onSave, onClose, onAddCustomIcon }: {
   const customIcons = useContext(CustomIconsContext);
   const [draft, setDraft] = useState<Family>(() => structuredClone(family));
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<FamilyGroup | null>(null);
   const [query, setQuery] = useState('');
   const [addingCustomIcon, setAddingCustomIcon] = useState(false);
   const selected = draft.members.find(member => member.id === selectedId);
@@ -773,9 +808,14 @@ function FamilyEditor({ family, week, onSave, onClose, onAddCustomIcon }: {
 
   function addMember() {
     const id = newPersonId();
-    setDraft(current => ({ ...current, members: [...current.members, { id, name: '', emoji: '🧑' }] }));
+    setDraft(current => ({ ...current, members: [...current.members, { id, name: '', emoji: '🧑', role: 'child' }] }));
     setSelectedId(id);
+    setSelectedGroup(null);
     setQuery('');
+  }
+
+  function updateGroupIcon(group: FamilyGroup, emoji: string) {
+    setDraft(current => ({ ...current, groupIcons: { ...defaultGroupIcons, ...current.groupIcons, [group]: emoji } }));
   }
 
   return <dialog ref={dialog} aria-labelledby="familyTitle" onClose={onClose}>
@@ -785,14 +825,27 @@ function FamilyEditor({ family, week, onSave, onClose, onAddCustomIcon }: {
       <input id="familyName" className="mini-input" maxLength={40} value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} placeholder={defaultFamily.name} />
       <div className="section-title person-section-title">Family members</div>
       <div className="family-members">{draft.members.map(member => <div className="family-member" key={member.id}>
-        <button type="button" className={`member-emoji ${selectedId === member.id ? 'selected' : ''}`} onClick={() => { setSelectedId(member.id); setQuery(''); }} aria-label={`Change icon for ${member.name || 'new member'}`} aria-pressed={selectedId === member.id}><MemberEmoji emoji={member.emoji} /></button>
+        <button type="button" className={`member-emoji ${selectedId === member.id ? 'selected' : ''}`} onClick={() => { setSelectedId(member.id); setSelectedGroup(null); setQuery(''); }} aria-label={`Change icon for ${member.name || 'new member'}`} aria-pressed={selectedId === member.id}><MemberEmoji emoji={member.emoji} /></button>
         <input className="mini-input" maxLength={25} aria-label="Member name" placeholder="Name" value={member.name} onChange={event => updateMember(member.id, { name: event.target.value })} />
+        <select className="member-role" aria-label={`Role for ${member.name || 'new member'}`} value={memberRole(member)} onChange={event => updateMember(member.id, { role: event.target.value as Family['members'][number]['role'] })}><option value="dad">Dad</option><option value="mum">Mum</option><option value="child">Child</option></select>
         <button type="button" className="remove-member" aria-label={`Remove ${member.name || 'new member'}`} disabled={draft.members.length === 1} onClick={() => {
           setDraft(current => ({ ...current, members: current.members.filter(person => person.id !== member.id) }));
           if (selectedId === member.id) setSelectedId(null);
         }}>Remove</button>
       </div>)}</div>
       <button type="button" className="btn add-member" onClick={addMember}>+ Add member</button>
+      <div className="section-title person-section-title">Family groups</div>
+      <p className="hint">Group pictures appear when everyone in a group joins an activity.</p>
+      <div className="family-groups">{(['family', 'kids', 'parents'] as const).map(group => <button key={group} type="button" className={`person-choice ${selectedGroup === group ? 'selected' : ''}`} aria-pressed={selectedGroup === group} onClick={() => { setSelectedGroup(group); setSelectedId(null); setQuery(''); }}><FamilyContext.Provider value={draft}><GroupFace group={group} /></FamilyContext.Provider>{group === 'kids' ? 'Kids' : group === 'parents' ? 'Parents' : 'Family'}</button>)}</div>
+      {selectedGroup && <section className="member-picker" aria-label={`Choose icon for ${selectedGroup}`}>
+        <div className="section-title">Icon for {selectedGroup}</div>
+        <input className="mini-input icon-search" type="search" aria-label="Search group emojis" placeholder="Search emojis" value={query} onChange={event => setQuery(event.target.value)} />
+        <div className="custom-icon-upload"><button className="btn" type="button" onClick={() => setAddingCustomIcon(true)}>＋ Add custom icon</button></div>
+        <div className="emoji-picker"><button type="button" className={`choice ${(draft.groupIcons?.[selectedGroup] ?? 'auto') === 'auto' ? 'selected' : ''}`} onClick={() => updateGroupIcon(selectedGroup, 'auto')}><FamilyContext.Provider value={draft}><GroupPicture group={selectedGroup} className="big" iconOverride="auto" /></FamilyContext.Provider><span>From members</span></button>
+          {familyIcons.map(item => <button type="button" key={item.id} className={`choice ${draft.groupIcons?.[selectedGroup] === item.id ? 'selected' : ''}`} onClick={() => updateGroupIcon(selectedGroup, item.id)}><IconPicture emoji={item.id} className="big" /><span>{item.name}</span></button>)}
+          {choices.map(entry => <button type="button" key={entry.hexcode} className={`choice ${findOpenMoji(draft.groupIcons?.[selectedGroup] ?? '')?.hexcode === entry.hexcode ? 'selected' : ''}`} onClick={() => updateGroupIcon(selectedGroup, entry.emoji)}><IconPicture emoji={entry.emoji} className="big" /><span>{entry.name}</span></button>)}
+        </div>
+      </section>}
       {selected && <section className="member-picker" aria-label={`Choose emoji for ${selected.name || 'new member'}`}>
         <div className="section-title">Icon for {selected.name || 'new member'}</div>
         <input className="mini-input icon-search" type="search" aria-label="Search member emojis" placeholder="Search emojis (e.g. person, cat)" value={query} onChange={event => setQuery(event.target.value)} />
@@ -810,6 +863,7 @@ function FamilyEditor({ family, week, onSave, onClose, onAddCustomIcon }: {
     {addingCustomIcon && <CustomIconDialog scope="family" onClose={() => setAddingCustomIcon(false)} onSave={icon => {
       const added = onAddCustomIcon(icon);
       if (selectedId) updateMember(selectedId, { emoji: added.id });
+      if (selectedGroup) updateGroupIcon(selectedGroup, added.id);
       setQuery('');
       setAddingCustomIcon(false);
     }} />}
@@ -952,8 +1006,8 @@ export default function App() {
     .filter(part => { const layout = sectionLayout(week[index][part.id]); return layout.slots > maxActivitiesPerSection || layout.groupCount > 1 || layout.largestGroup > 2; })
     .map(part => `${label} ${part.name.toLowerCase()}`));
   const oversizedActivities = displayedDays.flatMap(({ index }) => parts.flatMap(part =>
-    week[index][part.id].filter(activity => activity.who.length > maxPeoplePerActivity).map(activity =>
-      `${activity.label} (${activity.who.length}: ${activity.who.map(id => family.members.find(person => person.id === id)?.name ?? id).join(', ')})`)));
+    week[index][part.id].filter(activity => participantTokens(activity.who, family.members).length > maxPeoplePerActivity).map(activity =>
+      `${activity.label} (${participantTokens(activity.who, family.members).length} pictures)`)));
   const canFitPage = crowdedSections.length === 0 && oversizedActivities.length === 0;
   useEffect(() => {
     if (!fullscreen || canFitPage) return;
@@ -999,7 +1053,7 @@ export default function App() {
 
   function commitMove(before: WeekPlan, after: WeekPlan, id: string) {
     if (before === after) return;
-    const error = calendarLimitError(before, after);
+    const error = calendarLimitError(before, after, family.members);
     if (error) { window.alert(error); return; }
     setWeek(after);
     showMove(before, after, id);
@@ -1015,7 +1069,7 @@ export default function App() {
       if (companion) companion.simultaneousId = activity.simultaneousId;
     }
     destinationItems.splice(destination.index ?? destinationItems.length, 0, activity);
-    const error = calendarLimitError(week, next);
+    const error = calendarLimitError(week, next, family.members);
     if (error) { window.alert(error); return; }
     setWeek(next);
     if (target.index !== null) showMove(week, next, activity.id);
@@ -1046,11 +1100,11 @@ export default function App() {
 
   function deleteCustomIcon(icon: CustomIcon): void {
     const inUse = icon.scope === 'family'
-      ? family.members.filter(member => member.emoji === icon.id).length
+      ? family.members.filter(member => member.emoji === icon.id).length + Object.values(family.groupIcons ?? {}).filter(value => value === icon.id).length
       : week.reduce((total, day) => total + parts.reduce((count, part) => count + day[part.id].filter(activity => activity.icon === icon.id).length, 0), 0);
     const replacement = icon.scope === 'family' ? '🧑' : '🛝';
     const message = inUse
-      ? `Delete “${icon.name}”? It is used ${inUse} ${inUse === 1 ? 'time' : 'times'} on your planner. Those ${icon.scope === 'family' ? 'people' : 'activities'} will show ${replacement} instead.`
+      ? `Delete “${icon.name}”? It is used ${inUse} ${inUse === 1 ? 'time' : 'times'} on your planner. Affected ${icon.scope === 'family' ? 'people and groups' : 'activities'} will use their default icon instead.`
       : `Delete “${icon.name}” from your custom icons?`;
     if (!window.confirm(message)) return;
     try {
@@ -1060,7 +1114,8 @@ export default function App() {
     }
     setCustomIcons(current => current.filter(item => item.id !== icon.id));
     if (icon.scope === 'family') {
-      setFamily(current => ({ ...current, members: current.members.map(member => member.emoji === icon.id ? { ...member, emoji: replacement } : member) }));
+      setFamily(current => ({ ...current, members: current.members.map(member => member.emoji === icon.id ? { ...member, emoji: replacement } : member),
+        groupIcons: Object.fromEntries((['family', 'kids', 'parents'] as const).map(group => [group, current.groupIcons?.[group] === icon.id ? 'auto' : current.groupIcons?.[group] ?? 'auto'])) as Record<FamilyGroup, string> }));
     } else {
       setWeek(current => {
         const next = structuredClone(current);
@@ -1142,7 +1197,7 @@ export default function App() {
     </header>
     {fullscreen && <div className="fullscreen-toolbar"><button className="btn" type="button" onClick={() => changeFullscreen(false)}>✕ Exit full screen</button></div>}
     <Legend />
-    {!canFitPage && <p className="calendar-limit-warning" role="status">Full screen and one-page print are available after you simplify the saved activities. {crowdedSections.length > 0 && `Review ${crowdedSections.join(', ')}: each section holds up to 2 activities or groups, with at most 1 group of 2. `}{oversizedActivities.length > 0 && `These activities have more than 4 people selected: ${oversizedActivities.join('; ')}. Deselect people until 4 remain in each. `}Your activities are still saved below.</p>}
+    {!canFitPage && <p className="calendar-limit-warning" role="status">Full screen and one-page print are available after you simplify the saved activities. {crowdedSections.length > 0 && `Review ${crowdedSections.join(', ')}: each section holds up to 2 activities or groups, with at most 1 group of 2. `}{oversizedActivities.length > 0 && `These activities show more than 4 pictures: ${oversizedActivities.join('; ')}. Deselect people or complete a group until 4 pictures remain in each. `}Your activities are still saved below.</p>}
     <div className="intro">Tap an activity to edit it. Drag onto the highlighted area to group activities, or above or below to move them apart (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
     <Calendar week={week} displayedDays={displayedDays} onEdit={setTarget} onDelete={deleteActivityById} onCommit={commitMove} />
     <p className="smallnote">Each time-of-day row fits its activities · Example activities only · Changes save on this device · A4 landscape print · Icons by <a href="https://openmoji.org/">OpenMoji</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>)</p>
