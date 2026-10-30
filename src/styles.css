@@ -858,3 +858,14 @@ button:disabled{cursor:default;opacity:.55}
 }
 .shell .calendar .part .simultaneous-cards .activity .people:has(.group-face){width:var(--member-group-size)}
 .shell .calendar .part .simultaneous-cards > .activity:has(.group-face){--stack-face-height:var(--member-group-size)}
+
+
+/* Individual member faces in calendar cards. */
+:root{--activity-face-size:45px}
+.shell .calendar .part .activity .activity-open .people .face:not(.group-face){
+  flex:0 0 var(--activity-face-size);
+  width:var(--activity-face-size);height:var(--activity-face-size);
+  min-width:var(--activity-face-size);min-height:var(--activity-face-size);
+  font-size:var(--activity-face-size);
+}
+.shell .calendar .part .simultaneous-cards > .activity:not(:has(.group-face)){--stack-face-height:var(--activity-face-size)}
