@@ -708,3 +708,14 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .fullscreen-calendar .simultaneous-cards > .activity.stack-top .activity-open::after{flex-grow:0}
 }
 
+/* Keep every card in a group aligned when any face stack needs the top. */
+@media screen and (min-width:901px), print{
+  .simultaneous-cards:has(> .activity.stack-top) > .activity .activity-open,
+  .shell:not(.fullscreen-calendar) .simultaneous-cards:has(> .activity.stack-top) > .activity .activity-open{justify-content:flex-start}
+  .simultaneous-cards:has(> .activity.stack-top) > .activity .activity-open::before{display:none}
+}
+@media screen{
+  .fullscreen-calendar .simultaneous-cards:has(> .activity.stack-top) > .activity .activity-open{justify-content:flex-start}
+  .fullscreen-calendar .simultaneous-cards:has(> .activity.stack-top) > .activity .activity-open::before{display:none}
+}
+
