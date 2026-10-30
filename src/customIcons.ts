@@ -28,16 +28,16 @@ export function validateIconFile(file: File): void {
   if (file.size > 5 * 1024 * 1024) throw new Error('Choose an image smaller than 5 MB.');
 }
 
-export interface ImageCrop { zoom: number; x: number; y: number }
+export interface ImageCrop { zoom: number; x: number; y: number; rotation: number }
 
 export function fitImageScale(width: number, height: number, squareSize: number): number {
   return Math.min(squareSize / width, squareSize / height);
 }
 
-export async function imageFromFile(file: File, crop: ImageCrop): Promise<string> {
-  validateIconFile(file);
+export async function imageFromFile(file: File | string, crop: ImageCrop): Promise<string> {
+  if (typeof file !== 'string') validateIconFile(file);
 
-  const objectUrl = URL.createObjectURL(file);
+  const objectUrl = typeof file === 'string' ? file : URL.createObjectURL(file);
   try {
     const source = new Image();
     source.src = objectUrl;
@@ -50,9 +50,11 @@ export async function imageFromFile(file: File, crop: ImageCrop): Promise<string
     const scale = fitImageScale(source.naturalWidth, source.naturalHeight, 128) * crop.zoom;
     const width = source.naturalWidth * scale;
     const height = source.naturalHeight * scale;
-    context.drawImage(source, (128 - width) / 2 + crop.x * 128 / 240, (128 - height) / 2 + crop.y * 128 / 240, width, height);
+    context.translate(64 + crop.x * 128 / 240, 64 + crop.y * 128 / 240);
+    context.rotate(crop.rotation * Math.PI / 180);
+    context.drawImage(source, -width / 2, -height / 2, width, height);
     return canvas.toDataURL('image/png');
   } finally {
-    URL.revokeObjectURL(objectUrl);
+    if (typeof file !== 'string') URL.revokeObjectURL(objectUrl);
   }
 }

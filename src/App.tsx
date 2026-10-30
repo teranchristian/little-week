@@ -321,8 +321,9 @@ function CustomIconDialog({ scope, existing, onSave, onClose }: {
   const dialog = useRef<HTMLDialogElement>(null);
   const fileRequest = useRef(0);
   const drag = useRef<{ pointerId: number; x: number; y: number; offsetX: number; offsetY: number } | null>(null);
-  const [source, setSource] = useState<{ file: File; url: string; width: number; height: number } | null>(null);
+  const [source, setSource] = useState<{ file: File | null; url: string; width: number; height: number } | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [name, setName] = useState(existing?.name ?? '');
   const [tag, setTag] = useState(existing?.tag ?? '');
@@ -337,7 +338,18 @@ function CustomIconDialog({ scope, existing, onSave, onClose }: {
 
   useEffect(() => { dialog.current?.showModal(); }, []);
   useEffect(() => () => { fileRequest.current++; }, []);
-  useEffect(() => () => { if (source) URL.revokeObjectURL(source.url); }, [source]);
+  useEffect(() => {
+    if (!existing) return;
+    const request = fileRequest.current;
+    const preview = new Image();
+    preview.src = existing.image;
+    void preview.decode().then(() => {
+      if (request === fileRequest.current && preview.naturalWidth && preview.naturalHeight) {
+        setSource({ file: null, url: existing.image, width: preview.naturalWidth, height: preview.naturalHeight });
+      }
+    }).catch(() => setError('Could not edit this image. You can still replace it.'));
+  }, [existing]);
+  useEffect(() => () => { if (source?.file) URL.revokeObjectURL(source.url); }, [source]);
 
   async function chooseFile(file: File) {
     const request = ++fileRequest.current;
@@ -355,6 +367,7 @@ function CustomIconDialog({ scope, existing, onSave, onClose }: {
       const baseName = file.name.replace(/\.[^.]+$/, '').trim().slice(0, 25);
       setSource({ file, url, width: preview.naturalWidth, height: preview.naturalHeight });
       setZoom(1);
+      setRotation(0);
       setOffset({ x: 0, y: 0 });
       if (!name) setName(baseName);
       if (!tag) setTag(baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 25));
@@ -378,7 +391,9 @@ function CustomIconDialog({ scope, existing, onSave, onClose }: {
     setBusy(true);
     setError('');
     try {
-      const image = source ? await imageFromFile(source.file, { zoom, x: offset.x, y: offset.y }) : existing!.image;
+      const image = source && (source.file || zoom !== 1 || rotation !== 0 || offset.x !== 0 || offset.y !== 0)
+        ? await imageFromFile(source.file ?? source.url, { zoom, x: offset.x, y: offset.y, rotation })
+        : existing!.image;
       if (request !== fileRequest.current) return;
       onSave({ scope, image, name: name.trim(), tag: tag.trim() });
     }
@@ -398,9 +413,9 @@ function CustomIconDialog({ scope, existing, onSave, onClose }: {
         onPointerUp={event => { if (drag.current?.pointerId === event.pointerId) drag.current = null; }}
         onPointerCancel={event => { if (drag.current?.pointerId === event.pointerId) drag.current = null; }}
         onKeyDown={event => { if (!source) return; const step = event.shiftKey ? 20 : 5; const delta = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[event.key] as [number, number] | undefined; if (delta) { event.preventDefault(); setOffset(current => ({ x: clamp(current.x + delta[0], limitX), y: clamp(current.y + delta[1], limitY) })); } }}>
-        {source ? <img src={source.url} alt="" draggable={false} style={{ width: imageWidth, height: imageHeight, transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px)` }} /> : existing ? <img src={existing.image} alt="" /> : <span>Preview</span>}
+        {source ? <img src={source.url} alt="" draggable={false} style={{ width: imageWidth, height: imageHeight, transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px) rotate(${rotation}deg)` }} /> : existing ? <img src={existing.image} alt="" /> : <span>Preview</span>}
       </div>
-      {source && <div className="custom-icon-zoom"><span className="hint">↔ Drag the image in the square to move it ↕</span><label htmlFor="customIconZoom">Size</label><input id="customIconZoom" type="range" min="1" max="3" step="0.05" value={zoom} onChange={event => { const nextZoom = Number(event.target.value); const nextWidth = source.width * baseScale * nextZoom; const nextHeight = source.height * baseScale * nextZoom; setZoom(nextZoom); setOffset(current => ({ x: clamp(current.x, (nextWidth - 240) / 2), y: clamp(current.y, (nextHeight - 240) / 2) })); }} /><output htmlFor="customIconZoom">{Math.round(zoom * 100)}%</output></div>}
+      {source && <div className="custom-icon-controls"><span className="hint">↔ Drag the image in the square to move it ↕</span><label htmlFor="customIconZoom">Size</label><input id="customIconZoom" type="range" min="1" max="3" step="0.05" value={zoom} onChange={event => { const nextZoom = Number(event.target.value); const nextWidth = source.width * baseScale * nextZoom; const nextHeight = source.height * baseScale * nextZoom; setZoom(nextZoom); setOffset(current => ({ x: clamp(current.x, (nextWidth - 240) / 2), y: clamp(current.y, (nextHeight - 240) / 2) })); }} /><output htmlFor="customIconZoom">{Math.round(zoom * 100)}%</output><label htmlFor="customIconRotation">Tilt</label><input id="customIconRotation" type="range" min="-30" max="30" step="1" value={rotation} onChange={event => setRotation(Number(event.target.value))} /><output htmlFor="customIconRotation">{rotation}°</output></div>}
       <label className="section-title" htmlFor="customIconName">Name</label>
       <input id="customIconName" className="mini-input" maxLength={25} value={name} onChange={event => setName(event.target.value)} placeholder="e.g. Ballet class" />
       <label className="section-title custom-icon-field" htmlFor="customIconTag">Tag name</label>
