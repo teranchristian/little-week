@@ -289,6 +289,9 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
   const printRowHeights = Object.fromEntries(parts.map((part, index) =>
     [`--print-${part.id}-height`, `${(183 * printRowWeights[index] / printRowTotal).toFixed(2)}mm`]
   ));
+  const fullscreenRowWeights = Object.fromEntries(parts.map((part, index) =>
+    [`--fullscreen-${part.id}-weight`, `${printRowWeights[index]}fr`]
+  ));
   return <>
     <div className="desktop-day-bar" aria-hidden="true">
       <div ref={desktopDayHeaders} className="desktop-day-bar-inner" style={{ '--calendar-columns': displayedDays.length } as CSSProperties}>
@@ -301,7 +304,7 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
     <nav ref={dayNav} className="day-nav" aria-label="Jump to day">
       {displayedDays.map(({ index, label, date }) => <button key={index} type="button" className={activeDay === index ? 'active' : ''} aria-current={activeDay === index ? 'location' : undefined} onClick={() => document.getElementById(`day-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{label}{date && <span className="nav-date">{date.getDate()}</span>}</button>)}
     </nav>
-    <div className={`calendar ${displayedDays.length < 7 ? 'short-view' : ''}`} style={{ '--calendar-columns': displayedDays.length, ...printRowHeights } as CSSProperties}>
+    <div className={`calendar ${displayedDays.length < 7 ? 'short-view' : ''}`} style={{ '--calendar-columns': displayedDays.length, ...printRowHeights, ...fullscreenRowWeights } as CSSProperties}>
     <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={dragStart} onDragMove={updatePreview} onDragOver={updatePreview} onDragEnd={dragEnd} onDragCancel={clearDrag}>
       {displayedDays.map(({ index: dayIndex, label, date }) => <article className="day" id={`day-${dayIndex}`} key={dayIndex}>
         <div className="day-head"><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>
@@ -748,6 +751,7 @@ function BackupDialog({ onExport, onImport, onClose }: {
 }
 
 export default function App() {
+  const [fullscreen, setFullscreen] = useState(() => new URLSearchParams(window.location.search).get('fullscreen') === '1');
   const [family, setFamily] = useState<Family>(readFamily);
   const [week, setWeek] = useState<WeekPlan>(readWeek);
   const [customIcons, setCustomIcons] = useState<CustomIcon[]>(readCustomIcons);
@@ -761,6 +765,20 @@ export default function App() {
   const [undoMove, setUndoMove] = useState<UndoMove | null>(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const toastToken = useRef(0);
+
+  useEffect(() => {
+    const syncFullscreen = () => setFullscreen(new URLSearchParams(window.location.search).get('fullscreen') === '1');
+    window.addEventListener('popstate', syncFullscreen);
+    return () => window.removeEventListener('popstate', syncFullscreen);
+  }, []);
+
+  function changeFullscreen(enabled: boolean) {
+    const url = new URL(window.location.href);
+    if (enabled) url.searchParams.set('fullscreen', '1');
+    else url.searchParams.delete('fullscreen');
+    window.history.pushState(null, '', url);
+    setFullscreen(enabled);
+  }
 
   useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify(week)); } catch { /* Private browsing can block storage. */ } }, [week]);
   useEffect(() => { try { localStorage.setItem(familyStorageKey, JSON.stringify(family)); } catch { /* Private browsing can block storage. */ } }, [family]);
@@ -938,11 +956,12 @@ export default function App() {
     ? { id: newActivityId(), icon: '🛝', label: 'Playground', who: family.members[0] ? [family.members[0].id] : [] }
     : week[target.day][target.part][target.index]);
 
-  return <FamilyContext.Provider value={family}><CustomIconsContext.Provider value={customIcons}><main className={`shell ${showBackToTop ? 'with-back-to-top' : ''}`}>
+  return <FamilyContext.Provider value={family}><CustomIconsContext.Provider value={customIcons}><main className={`shell ${showBackToTop ? 'with-back-to-top' : ''} ${fullscreen ? 'fullscreen-calendar' : ''}`}>
     <header className="top">
       <div className="titleline"><img className="site-logo" src={`${import.meta.env.BASE_URL}logo/little-week.png`} alt="" /><div><h1>{family.name}</h1><p className="sub">The picture shows <strong>what</strong> we're doing. The little faces show <strong>who</strong> is doing it.</p></div></div>
-      <div className="actions"><button className="btn" type="button" onClick={() => setEditingFamily(true)}>👨‍👩‍👧‍👦 Edit family</button><button className="btn" type="button" onClick={() => setEditingCalendar(true)}>📅 Calendar view: {calendarSettings.start === 'today' ? 'Today' : calendarSettings.start === 'sunday' ? 'Sunday' : 'Monday'}</button><button className="btn" type="button" onClick={() => setEditingCustomIcons(true)}>🎨 Custom icons</button><button className="btn" type="button" onClick={() => setEditingBackup(true)}>💾 Backup</button><button className="btn" type="button" onClick={reset}>↺ Reset example</button><button className="btn primary" type="button" onClick={() => window.print()}>🖨️ Print A4</button></div>
+      <div className="actions"><button className="btn" type="button" onClick={() => setEditingFamily(true)}>👨‍👩‍👧‍👦 Edit family</button><button className="btn" type="button" onClick={() => setEditingCalendar(true)}>📅 Calendar view: {calendarSettings.start === 'today' ? 'Today' : calendarSettings.start === 'sunday' ? 'Sunday' : 'Monday'}</button><button className="btn" type="button" onClick={() => setEditingCustomIcons(true)}>🎨 Custom icons</button><button className="btn" type="button" onClick={() => setEditingBackup(true)}>💾 Backup</button><button className="btn" type="button" onClick={reset}>↺ Reset example</button><button className="btn" type="button" onClick={() => changeFullscreen(true)}>⛶ Full screen</button><button className="btn primary" type="button" onClick={() => window.print()}>🖨️ Print A4</button></div>
     </header>
+    {fullscreen && <div className="fullscreen-toolbar"><button className="btn" type="button" onClick={() => changeFullscreen(false)}>✕ Exit full screen</button></div>}
     <Legend />
     <div className="intro">Tap an activity to edit it. Drag it to another spot to move it (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
     <Calendar week={week} displayedDays={displayedDays} onEdit={setTarget} onDelete={deleteActivityById} onCommit={commitMove} />

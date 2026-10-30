@@ -351,3 +351,47 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .activity-name{font-size:var(--screen-activity-label-size)}
   .activity-details{gap:3px}
 }
+
+/* Keep all seven days visible on tablet landscape screens. */
+@media screen and (min-width:901px) and (max-width:1200px){
+  .calendar,.desktop-day-bar-inner{min-width:0}
+  .calendar,.desktop-day-bar-inner{gap:6px}
+  .part{padding:8px 5px 9px}
+  .activity .people{gap:2px}
+  :root{
+    --screen-activity-icon-size:44px;
+    --screen-activity-face-size:28px;
+    --screen-activity-label-size:11px;
+  }
+}
+
+/* A URL-controlled, print-style calendar that fills the browser window. */
+.fullscreen-toolbar{display:none}
+@media screen{
+  .shell.fullscreen-calendar{display:flex;flex-direction:column;width:100%;max-width:none;height:100dvh;min-height:0;padding:10px;overflow:hidden}
+  .fullscreen-calendar > .top,.fullscreen-calendar > .legend,.fullscreen-calendar > .intro,
+  .fullscreen-calendar > .smallnote,.fullscreen-calendar .day-nav,
+  .fullscreen-calendar .desktop-day-bar,.fullscreen-calendar .back-to-top{display:none}
+  .fullscreen-calendar .fullscreen-toolbar{display:flex;flex:none;justify-content:flex-end;align-items:center;height:42px;padding-bottom:6px}
+  .fullscreen-calendar .fullscreen-toolbar .btn{min-height:36px;padding:6px 10px;font-size:12px}
+  .fullscreen-calendar .scroll{flex:1 1 auto;min-height:0;width:100%;margin:0;padding:0;overflow:auto}
+  .fullscreen-calendar .calendar{display:grid;width:100%;min-width:700px;height:100%;gap:6px;grid-auto-flow:column;grid-template-columns:repeat(var(--calendar-columns,7),minmax(0,1fr));grid-template-rows:34px minmax(0,var(--fullscreen-morning-weight,1fr)) minmax(0,var(--fullscreen-afternoon-weight,1fr)) minmax(0,var(--fullscreen-night-weight,1fr))}
+  .fullscreen-calendar .day{display:contents}
+  .fullscreen-calendar .calendar .day-head{display:flex;justify-content:center;height:34px;padding:4px;font-size:13px;border-radius:8px}
+  .fullscreen-calendar .day-date{font-size:10px}
+  .fullscreen-calendar .part{height:100%;min-height:0;padding:5px 4px;gap:3px;border-radius:9px;overflow:hidden}
+  .fullscreen-calendar .part-head{flex:none;font-size:10px;padding:0 2px}
+  .fullscreen-calendar .part-head .symbol{font-size:12px}
+  .fullscreen-calendar .activities{flex:1 1 0;min-height:0;gap:3px;overflow:hidden}
+  .fullscreen-calendar .activities>.activity{flex:1 1 0;min-height:0;padding:3px 2px;gap:2px;border-radius:6px;overflow:hidden}
+  .fullscreen-calendar .activity .activity-emoji,
+  .fullscreen-calendar .activities>.activity:only-child .activity-emoji,
+  .fullscreen-calendar .hide-words .activities>.activity:only-child .activity-emoji{width:clamp(24px,4.5vh,42px);min-width:clamp(24px,4.5vh,42px);height:clamp(24px,4.5vh,42px);min-height:clamp(24px,4.5vh,42px);font-size:clamp(23px,4.3vh,40px)}
+  .fullscreen-calendar .activity-details{flex:0 1 auto;min-height:0;gap:1px}
+  .fullscreen-calendar .activity-name{font-size:10px;line-height:1.1}
+  .fullscreen-calendar .activity .people{gap:1px}
+  .fullscreen-calendar .activity .people .face,
+  .fullscreen-calendar .activities>.activity:only-child .people .face,
+  .fullscreen-calendar .hide-words .activity .people .face{width:clamp(16px,2.8vh,26px);height:clamp(16px,2.8vh,26px);font-size:clamp(16px,2.8vh,26px)}
+  .fullscreen-calendar .add,.fullscreen-calendar .activity-delete{display:none}
+}
