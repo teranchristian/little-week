@@ -143,7 +143,8 @@ function ActivityCard({ day, part, index, activity, onEdit, onDelete, dropPrevie
     return () => { observer.disconnect(); window.removeEventListener('beforeprint', update); window.removeEventListener('afterprint', update); };
   }, [activity.who, activity.icon, activity.label]);
   const peopleCount = participantTokens(activity.who, useContext(FamilyContext).members).length;
-  return <div ref={node => { cardRef.current = node; setNodeRef(node); }} className={`activity ${isDragging ? 'is-dragging' : ''} ${dropPreview?.id === activity.id ? `drop-${dropPreview.mode}` : ''}`} style={{ '--people-count': Math.max(1, peopleCount) } as CSSProperties}>
+  const faceColumns = Math.min(2, Math.max(1, peopleCount));
+  return <div ref={node => { cardRef.current = node; setNodeRef(node); }} className={`activity ${isDragging ? 'is-dragging' : ''} ${dropPreview?.id === activity.id ? `drop-${dropPreview.mode}` : ''}`} style={{ '--people-count': Math.max(1, peopleCount), '--face-columns': faceColumns, '--face-rows': Math.ceil(peopleCount / faceColumns) } as CSSProperties}>
     <button type="button" className="activity-open" style={{ transform: dropPreview && dropPreview.mode !== 'group' ? CSS.Transform.toString(transform) : undefined, transition }} onClick={onEdit}
       title={`Edit or move ${activity.label}`} {...attributes} {...listeners}>
       <ActivityContent activity={activity} />

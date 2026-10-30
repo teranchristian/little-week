@@ -815,6 +815,40 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .fullscreen-calendar .activity .people .face .member-glyph{font-size:1em}
 }
 
+/* Balance full-screen faces using the card's width, height, and participant grid. */
+@media screen{
+  .fullscreen-calendar .activities > .activity{
+    --balanced-face-size:min(88px, max(0px, calc((100cqw - 12px - (var(--face-columns) - 1) * 4px) / var(--face-columns))), max(0px, calc((100cqh - 36px - (var(--face-rows) - 1) * 4px) / var(--face-rows))))
+  }
+  .fullscreen-calendar .activities > .activity .activity-emoji,
+  .fullscreen-calendar .activities > .activity:only-child .activity-emoji{
+    width:min(100px, 80cqw, 20cqh);height:min(100px, 80cqw, 20cqh);
+    min-width:0;min-height:0;font-size:min(100px, 80cqw, 20cqh)
+  }
+  .fullscreen-calendar .activities > .activity .people{
+    width:calc(var(--face-columns) * var(--balanced-face-size) + (var(--face-columns) - 1) * 4px);
+    max-width:100%;column-gap:4px;row-gap:4px
+  }
+  .fullscreen-calendar .activities > .activity .people .face,
+  .fullscreen-calendar .activities > .activity:only-child .people .face,
+  .fullscreen-calendar .hide-words .activities > .activity .people .face{
+    width:var(--balanced-face-size);height:var(--balanced-face-size);font-size:var(--balanced-face-size)
+  }
+  .fullscreen-calendar .simultaneous-cards > .activity{
+    --group-icon-size:min(50px, 65cqw, 30cqh);
+    --group-face-size:min(84px, 75cqw, max(0px, (100cqh - 55px) / var(--people-count)));
+    --stack-face-height:var(--group-face-size)
+  }
+  .fullscreen-calendar .simultaneous-cards .activity .activity-emoji{
+    width:var(--group-icon-size);height:var(--group-icon-size);
+    min-width:0;min-height:0;font-size:var(--group-icon-size)
+  }
+  .fullscreen-calendar .simultaneous-cards .activity .people .face{
+    width:var(--group-face-size);height:var(--group-face-size);
+    min-width:0;min-height:0;font-size:var(--group-face-size)
+  }
+}
+
 /* Use the same height-aware picture sizing on the printed page. */
 @media print{
   .calendar{height:197.5mm;min-height:0;grid-template-columns:18mm repeat(var(--calendar-columns,7),minmax(0,1fr));grid-template-rows:9mm minmax(0,var(--print-morning-height,61mm)) minmax(0,var(--print-afternoon-height,61mm)) minmax(0,var(--print-night-height,61mm))}
@@ -862,29 +896,51 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
 .part[data-over-limit]{outline:2px solid #d4a55a;outline-offset:-2px}
 button:disabled{cursor:default;opacity:.55}
 
-
-/* Member group icons in calendar cards. */
-:root{--member-group-size:56px}
-.shell .calendar .part .activity .activity-open .people .group-face{
-  flex:0 0 var(--member-group-size);
-  width:var(--member-group-size);height:var(--member-group-size);
-  min-width:var(--member-group-size);min-height:var(--member-group-size);
-  font-size:var(--member-group-size);
+/* Activity picture and label sizes shared by desktop, phone, full screen, and print. */
+:root{
+  --activity-face-size:45px;
+  --member-group-size:56px;
+  --activity-icon-size:36px;
+  --activity-label-size:12px;
+  --activity-face-gap:4px;
 }
-.shell .calendar .part .activities > .activity .people:has(.group-face){
-  width:calc(var(--face-columns, 1) * var(--member-group-size) + (var(--face-columns, 1) - 1) * var(--activity-face-gap, 4px));
+.shell .calendar .part .activity .activity-open .activity-emoji{
+  width:var(--activity-icon-size);height:var(--activity-icon-size);
+  min-width:var(--activity-icon-size);min-height:var(--activity-icon-size);
+  font-size:var(--activity-icon-size);aspect-ratio:1;
+}
+.shell .calendar .part .activity .activity-open .activity-name{
+  font-size:var(--activity-label-size);
+}
+.shell .calendar .part .activity .people{
+  gap:var(--activity-face-gap);
+}
+.shell .calendar .part .activities > .activity .people{
+  width:calc(var(--face-columns, 1) * var(--activity-face-size) + (var(--face-columns, 1) - 1) * var(--activity-face-gap));
   max-width:100%;
 }
-.shell .calendar .part .simultaneous-cards .activity .people:has(.group-face){width:var(--member-group-size)}
-.shell .calendar .part .simultaneous-cards > .activity:has(.group-face){--stack-face-height:var(--member-group-size)}
-
-
-/* Individual member faces in calendar cards. */
-:root{--activity-face-size:45px}
-.shell .calendar .part .activity .activity-open .people .face:not(.group-face){
+.shell .calendar .part .simultaneous-cards .activity .people{
+  width:var(--activity-face-size);
+}
+.shell .calendar .part .activity .activity-open .people .face{
   flex:0 0 var(--activity-face-size);
   width:var(--activity-face-size);height:var(--activity-face-size);
   min-width:var(--activity-face-size);min-height:var(--activity-face-size);
   font-size:var(--activity-face-size);
 }
-.shell .calendar .part .simultaneous-cards > .activity:not(:has(.group-face)){--stack-face-height:var(--activity-face-size)}
+.shell .calendar .part .activity .activity-open .people .group-face{
+  flex-basis:var(--member-group-size);
+  width:var(--member-group-size);height:var(--member-group-size);
+  min-width:var(--member-group-size);min-height:var(--member-group-size);
+  font-size:var(--member-group-size);
+}
+.shell .calendar .part .activities > .activity .people:has(.group-face){
+  width:calc(var(--face-columns, 1) * var(--member-group-size) + (var(--face-columns, 1) - 1) * var(--activity-face-gap));
+}
+.shell .calendar .part .simultaneous-cards .activity .people:has(.group-face){width:var(--member-group-size)}
+.shell .calendar .part .activity .people .face .member-glyph{font-size:1em}
+.shell .calendar .part .simultaneous-cards > .activity{
+  --stack-face-height:var(--activity-face-size);
+  --stack-gap:var(--activity-face-gap);
+}
+.shell .calendar .part .simultaneous-cards > .activity:has(.group-face){--stack-face-height:var(--member-group-size)}

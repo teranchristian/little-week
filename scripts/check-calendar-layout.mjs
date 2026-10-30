@@ -41,6 +41,24 @@ try {
     assert.ok(Math.abs(used - row.space) < 2, `${row.cards.length} card(s) must fill the available height`);
     assert.ok(row.cards.every(height => Math.abs(height - row.cards[0]) < 2), 'Cards in one day part must have equal height');
   }
+  const faceCard = count => `<div class="activity" style="--people-count:${count};--face-columns:${Math.min(2, count)};--face-rows:${Math.ceil(count / Math.min(2, count))}"><button class="activity-open"><span class="activity-emoji">🍽️</span><span class="activity-details"><span class="activity-name">Activity</span><span class="people">${'<span class="face">🙂</span>'.repeat(count)}</span></span></button></div>`;
+  const faceDay = (count, extra = false) => `<article class="day"><div class="day-head">Day</div><div class="part morning"><div class="part-head">Morning</div><div class="activities">${faceCard(count)}${extra ? `<div class="simultaneous-group"><div class="simultaneous-cards">${faceCard(1)}${faceCard(1)}</div></div>` : ''}</div></div>${part('afternoon', 0)}${part('night', 0)}</article>`;
+  const faceFixture = join(directory, 'faces.html');
+  writeFileSync(faceFixture, `<!doctype html><meta name="viewport" content="width=device-width"><style>${css}</style><main class="shell fullscreen-calendar"><div class="scroll"><div class="calendar" style="--calendar-columns:3">${faceDay(1)}${faceDay(4)}${faceDay(1, true)}</div></div></main><pre id="result"></pre><script>document.getElementById('result').textContent=JSON.stringify({cards:[...document.querySelectorAll('.part.morning')].map(part=>{const card=part.querySelector('.activity');return{card:card.getBoundingClientRect().height,faces:[...card.querySelectorAll('.face')].map(face=>({size:face.getBoundingClientRect().width,top:face.getBoundingClientRect().top}))}}),groupIconTop:document.querySelector('.simultaneous-cards .activity-emoji').getBoundingClientRect().top,groupFaceTop:document.querySelector('.simultaneous-cards .face').getBoundingClientRect().top});</script>`);
+  const faceBrowser = spawnSync(chrome, [
+    '--headless', '--no-sandbox', '--disable-gpu',
+    `--user-data-dir=${join(directory, 'face-chrome-profile')}`,
+    '--window-size=1700,1000', '--dump-dom', `file://${faceFixture}`,
+  ], { encoding: 'utf8', timeout: 20000 });
+  if (faceBrowser.error || faceBrowser.status !== 0) throw new Error(`Chrome face layout check failed: ${faceBrowser.error ?? faceBrowser.stderr}`);
+  const faceResult = faceBrowser.stdout.match(/<pre id="result">([^<]+)<\/pre>/)?.[1];
+  assert.ok(faceResult, 'Chrome did not return face measurements');
+  const { cards: [single, four, shared], groupIconTop, groupFaceTop } = JSON.parse(faceResult);
+  assert.ok(Math.abs(single.faces[0].size - 45) < 2 && Math.abs(four.faces[0].size - 45) < 2, `Full-screen faces should be 45px (got ${single.faces[0].size}px and ${four.faces[0].size}px)`);
+  assert.ok(Math.abs(single.faces[0].size - four.faces[0].size) < 2, 'One and four faces should have balanced sizes in roomy cards');
+  assert.ok(Math.abs(shared.faces[0].size - 45) < 2, `A face in a shared section should be 45px (got ${shared.faces[0].size}px)`);
+  assert.ok(groupIconTop < groupFaceTop, 'Grouped card icons must remain above their faces');
+  assert.ok(four.faces[0].top === four.faces[1].top && four.faces[2].top > four.faces[0].top, 'Four faces should form two rows');
   console.log('Calendar cards fill the row with one, two, or three activities.');
 } finally {
   rmSync(directory, { recursive: true, force: true });
