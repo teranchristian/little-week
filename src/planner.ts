@@ -59,6 +59,25 @@ export interface Activity {
   icon: string;
   label: string;
   who: PersonId[];
+  simultaneousId?: string;
+}
+export function sortGroupedActivities(activities: Activity[], members: Person[]): Activity[] {
+  const rank = (activity: Activity) => {
+    if (activity.who.length !== 1) return activity.who.length ? members.length : members.length + 1;
+    const index = members.findIndex(member => member.id === activity.who[0]);
+    return index < 0 ? members.length : index;
+  };
+  return [...activities].sort((a, b) => rank(a) - rank(b) || a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+}
+export function printActivityWeight(activities: Activity[]): number {
+  const groups = new Map<string, number>();
+  let weight = 0;
+  for (const activity of activities) {
+    if (!activity.simultaneousId) weight++;
+    else groups.set(activity.simultaneousId, Math.max(groups.get(activity.simultaneousId) ?? 0, activity.who.length));
+  }
+  for (const people of groups.values()) weight += 1 + Math.max(0, people - 1) * 0.25;
+  return weight;
 }
 export type DayPlan = Record<PartId, Activity[]>;
 export type WeekPlan = DayPlan[];
@@ -80,11 +99,30 @@ export function moveActivity(week: WeekPlan, from: ActivityPosition, to: Activit
   if (!source?.[from.index] || !destination) return week;
   const sameSlot = from.day === to.day && from.part === to.part;
   const targetIndex = to.index === null ? destination.length - (sameSlot ? 1 : 0) : to.index;
-  if (sameSlot && from.index === targetIndex) return week;
+  if (sameSlot && from.index === targetIndex && !source[from.index].simultaneousId) return week;
 
   const next = structuredClone(week);
   const [activity] = next[from.day][from.part].splice(from.index, 1);
+  delete activity.simultaneousId;
   next[to.day][to.part].splice(targetIndex, 0, activity);
+  return next;
+}
+
+// Add one activity to another's simultaneous group, leaving unrelated activities alone.
+export function groupActivity(week: WeekPlan, sourceId: string, targetId: string): WeekPlan {
+  const source = findActivity(week, sourceId);
+  const target = findActivity(week, targetId);
+  if (!source || !target || sourceId === targetId) return week;
+  const next = structuredClone(week);
+  const [item] = next[source.day][source.part].splice(source.index, 1);
+  const targetItems = next[target.day][target.part];
+  const targetIndex = targetItems.findIndex(activity => activity.id === targetId);
+  const companion = targetItems[targetIndex];
+  const groupId = companion.simultaneousId || companion.id;
+  companion.simultaneousId = groupId;
+  item.simultaneousId = groupId;
+  const lastIndex = targetItems.reduce((last, activity, index) => activity.simultaneousId === groupId ? index : last, targetIndex);
+  targetItems.splice(lastIndex + 1, 0, item);
   return next;
 }
 

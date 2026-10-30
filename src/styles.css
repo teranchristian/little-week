@@ -400,3 +400,245 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .fullscreen-calendar .hide-words .activity .people .face{width:clamp(16px,2.8vh,26px);height:clamp(16px,2.8vh,26px);font-size:clamp(16px,2.8vh,26px)}
   .fullscreen-calendar .add,.fullscreen-calendar .activity-delete{display:none}
 }
+
+.simultaneous-group{display:flex;flex-direction:column;gap:5px;flex:1 0 auto;min-width:0;padding:6px;border:0;border-radius:11px;background:rgba(255,255,255,.4)}
+.simultaneous-label{font-size:10px;font-weight:800;color:#41675b;text-align:center}
+.simultaneous-cards{display:flex;flex:1;gap:5px;min-width:0}
+.simultaneous-cards>.activity{flex:1 1 0;min-width:0;min-height:100px}
+.simultaneous-cards .activity-emoji{font-size:30px;min-width:30px}
+@media print{.simultaneous-group{padding:2px;gap:2px;min-height:0}.simultaneous-label{font-size:6px}.simultaneous-cards{gap:2px}.simultaneous-cards>.activity{min-height:0}.simultaneous-cards .activity-emoji{font-size:16px;min-width:16px}}
+.drag-hint{position:fixed;z-index:1000;bottom:20px;left:50%;transform:translateX(-50%);padding:9px 16px;border-radius:12px;background:#235e51;color:white;font-size:13px;font-weight:700;box-shadow:0 3px 12px #0003;pointer-events:none;white-space:nowrap}
+.activity.drop-group{border:2px solid #218d70;background:#e9f8ef}
+.drop-indicator{position:absolute;z-index:5;pointer-events:none}
+.drop-indicator.before,.drop-indicator.after{height:5px;left:3px;right:3px;background:#218d70;border-radius:4px;box-shadow:0 0 0 2px white}
+.drop-indicator.before{top:-5px}.drop-indicator.after{bottom:-5px}
+.drop-indicator.group{right:4px;bottom:4px;display:flex;align-items:center;gap:4px;padding:4px 6px;border-radius:7px;background:#d2f2e2;color:#205c49;font-size:10px;font-weight:800;box-shadow:0 1px 4px #0002}
+.drop-indicator-icon{font-size:22px;line-height:1}
+.simultaneous-group{position:relative}
+.group-dragging{padding-top:32px;padding-bottom:32px}
+.group-drop-edge{position:absolute;z-index:6;left:0;right:0;height:32px;display:flex;align-items:center;justify-content:center;color:#41675b;font-size:9px;font-weight:800;border-radius:7px;background:#dcefe4}
+.group-drop-edge.before{top:0}.group-drop-edge.after{bottom:0}
+.group-drop-edge.is-over{background:#218d70;color:white;box-shadow:0 0 0 2px white}
+.group-drop-target{position:absolute;z-index:7;left:8%;right:8%;top:37%;height:26%;min-height:30px;display:flex;align-items:center;justify-content:center;border:0;border-radius:9px;background:#e0f4e9eF;color:#245d49;font-size:10px;font-weight:800;text-align:center;pointer-events:none}
+.group-drop-target.is-over{background:#218d70;color:white}
+@media screen{
+  .simultaneous-cards>.activity{container-type:inline-size}
+  .simultaneous-cards .activity-name{font-size:clamp(9px, 18cqw, var(--screen-activity-label-size, 14px));overflow-wrap:break-word;word-break:normal}
+}
+@media screen{
+  .simultaneous-cards .activity-open{display:grid;grid-template-rows:52px 2.6em 1fr;align-content:stretch;justify-items:center;align-items:center;gap:4px;padding-top:20%}
+  .simultaneous-cards .activity-details{display:contents}
+  .simultaneous-cards .activity-name{text-align:center}
+  .simultaneous-cards .people{align-self:start}
+}
+@media screen{
+  .simultaneous-cards .activity .activity-emoji{width:min(62px, 100%);min-width:0;height:62px;min-height:62px;font-size:60px}
+  .simultaneous-cards .activity-open{grid-template-rows:62px 2.6em 1fr}
+}
+@media print{
+  .simultaneous-group{flex:1 1 0;min-width:0;overflow:visible}
+  .simultaneous-cards>.activity{container-type:inline-size;overflow:visible}
+  .simultaneous-cards .activity-open{display:grid;grid-template-rows:auto 2.6em 1fr;justify-items:center;align-items:center;gap:1mm;padding-top:1mm}
+  .simultaneous-cards .activity-details{display:contents}
+  .simultaneous-cards .activity .activity-emoji,
+  .calendar.short-view .simultaneous-cards .activity .activity-emoji{
+    width:min(14mm, 80cqw);min-width:0;height:auto;min-height:0;aspect-ratio:1;font-size:min(50px, 80cqw)
+  }
+  .simultaneous-cards .activity-name,
+  .calendar.short-view .simultaneous-cards .activity-name{font-size:clamp(6px, 15cqw, 11px);line-height:1.15;text-align:center;overflow-wrap:break-word;word-break:normal}
+  .simultaneous-cards .people{align-self:start;justify-content:center}
+  .simultaneous-cards .activity .people .face,
+  .calendar.short-view .simultaneous-cards .activity .people .face{width:min(7mm, 38cqw);height:auto;aspect-ratio:1;font-size:min(24px, 38cqw)}
+}
+/* Keep grouped pictures inside narrow cards and stack their faces as on screen. */
+.simultaneous-cards .activity-emoji img{width:100%;height:100%;object-fit:contain}
+@media print{
+  .simultaneous-cards .people{flex-direction:column;flex-wrap:nowrap;align-items:center;gap:1mm}
+  .simultaneous-cards .activity .people .face,
+  .calendar.short-view .simultaneous-cards .activity .people .face{width:min(8mm, 75cqw);height:auto;font-size:min(30px, 75cqw)}
+}
+/* Keep the icon, label and people close together in grouped vertical cards. */
+@media print{
+  .simultaneous-cards .activity-open{grid-template-rows:auto 2em 1fr;gap:.5mm}
+}
+@media screen{
+  .simultaneous-cards .people{flex-direction:column;flex-wrap:nowrap;align-items:center}
+  .fullscreen-calendar .simultaneous-cards .activity-open{grid-template-rows:62px 2em 1fr;gap:2px}
+}
+@media screen{
+  .fullscreen-calendar .simultaneous-cards .activity .people .face{
+    width:min(clamp(32px, 6vh, 56px), 80cqw);
+    height:min(clamp(32px, 6vh, 56px), 80cqw);
+    font-size:min(clamp(32px, 6vh, 56px), 80cqw);
+  }
+}
+@media screen{
+  .fullscreen-calendar .activities > .activity .people .face,
+  .fullscreen-calendar .activities > .activity:only-child .people .face,
+  .fullscreen-calendar .hide-words .activities > .activity .people .face{
+    width:clamp(32px, 6vh, 56px);height:clamp(32px, 6vh, 56px);font-size:clamp(32px, 6vh, 56px)
+  }
+}
+@media screen{
+  .fullscreen-calendar .activities > .activity{container-type:size}
+  .fullscreen-calendar .activities > .activity .people{flex-wrap:nowrap;max-width:100%}
+  .fullscreen-calendar .activities > .activity .people .face,
+  .fullscreen-calendar .activities > .activity:only-child .people .face,
+  .fullscreen-calendar .hide-words .activities > .activity .people .face{
+    width:min(56px, 20cqw, 28cqh);height:min(56px, 20cqw, 28cqh);font-size:min(56px, 20cqw, 28cqh)
+  }
+}
+@media screen{
+  .fullscreen-calendar .simultaneous-cards > .activity{container-type:size}
+  .fullscreen-calendar .simultaneous-cards .activity-open{padding-top:10px}
+  .fullscreen-calendar .simultaneous-cards .activity .people .face{
+    width:min(96cqw, 72px, max(0px, calc((100cqh - 110px) / var(--people-count))));
+    height:min(96cqw, 72px, max(0px, calc((100cqh - 110px) / var(--people-count))));
+    font-size:min(96cqw, 72px, max(0px, calc((100cqh - 110px) / var(--people-count))));
+  }
+}
+@media screen{
+  .fullscreen-calendar .simultaneous-cards > .activity{padding:3px 1px}
+}
+@media screen{
+  .fullscreen-calendar .activities > .activity:only-child{min-height:100px}
+  .fullscreen-calendar .activities > .activity:only-child .activity-open{
+    display:grid;grid-template-rows:62px 2em 1fr;align-content:stretch;justify-items:center;align-items:center;gap:2px;padding-top:10px
+  }
+  .fullscreen-calendar .activities > .activity:only-child .activity-details{display:contents}
+  .fullscreen-calendar .activities > .activity:only-child .activity-emoji{
+    width:min(62px, 100%);min-width:0;height:62px;min-height:62px;font-size:60px
+  }
+  .fullscreen-calendar .activities > .activity:only-child .people{align-self:start}
+  .fullscreen-calendar .activities > .activity:only-child .people .face{
+    width:min(72px, calc((100cqw - 12px) / var(--people-count)), 28cqh);height:min(72px, calc((100cqw - 12px) / var(--people-count)), 28cqh);font-size:min(72px, calc((100cqw - 12px) / var(--people-count)), 28cqh)
+  }
+}
+@media screen and (min-width:901px){
+  .shell:not(.fullscreen-calendar) .activities > .activity{container-type:inline-size}
+  .shell:not(.fullscreen-calendar) .activities > .activity .activity-open,
+  .shell:not(.fullscreen-calendar) .simultaneous-cards .activity-open{
+    display:grid;grid-template-rows:62px 2em 1fr;align-content:stretch;justify-items:center;align-items:center;gap:2px;padding-top:10px
+  }
+  .shell:not(.fullscreen-calendar) .activities > .activity .activity-details,
+  .shell:not(.fullscreen-calendar) .simultaneous-cards .activity-details{display:contents}
+  .shell:not(.fullscreen-calendar) .activities > .activity .activity-emoji,
+  .shell:not(.fullscreen-calendar) .simultaneous-cards .activity .activity-emoji{
+    width:min(62px, 100%);min-width:0;height:62px;min-height:62px;font-size:60px
+  }
+  .shell:not(.fullscreen-calendar) .activities > .activity .people,
+  .shell:not(.fullscreen-calendar) .simultaneous-cards .people{align-self:start}
+  .shell:not(.fullscreen-calendar) .activities > .activity .people{flex-wrap:nowrap;max-width:100%}
+  .shell:not(.fullscreen-calendar) .activities > .activity .people .face,
+  .shell:not(.fullscreen-calendar) .activities > .activity:only-child .people .face{
+    width:min(72px, calc((100cqw - 12px) / var(--people-count)));
+    height:min(72px, calc((100cqw - 12px) / var(--people-count)));
+    font-size:min(72px, calc((100cqw - 12px) / var(--people-count)))
+  }
+  .shell:not(.fullscreen-calendar) .simultaneous-cards > .activity{padding:3px 1px}
+  .shell:not(.fullscreen-calendar) .simultaneous-cards .activity .people .face{
+    width:min(96cqw, 72px);height:min(96cqw, 72px);font-size:min(96cqw, 72px)
+  }
+}
+@media screen and (min-width:901px){
+  .shell:not(.fullscreen-calendar) .activities > .activity:only-child .activity-open{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding-top:0
+  }
+  .shell:not(.fullscreen-calendar) .activities > .activity:only-child .activity-details{
+    display:flex;flex-direction:column;align-items:center;gap:3px
+  }
+  .shell:not(.fullscreen-calendar) .activities > .activity:only-child .people{align-self:center}
+}
+@media screen{
+  .fullscreen-calendar .activities > .activity:only-child .activity-open{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding-top:0
+  }
+  .fullscreen-calendar .activities > .activity:only-child .activity-details{
+    display:flex;flex-direction:column;align-items:center;gap:3px
+  }
+  .fullscreen-calendar .activities > .activity:only-child .people{align-self:center}
+}
+
+/* Standalone cards share their content alignment on desktop and in print. */
+@media screen and (min-width:901px), print{
+  .activities > .activity .activity-open,
+  .shell:not(.fullscreen-calendar) .activities > .activity .activity-open{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0
+  }
+  .activities > .activity .activity-details,
+  .shell:not(.fullscreen-calendar) .activities > .activity .activity-details{
+    display:flex;flex-direction:column;align-items:center;gap:3px
+  }
+  .activities > .activity .people,
+  .shell:not(.fullscreen-calendar) .activities > .activity .people{align-self:center;max-width:100%}
+}
+@media print{
+  .activities > .activity{container-type:inline-size}
+  .activities > .activity .people .face,
+  .activities > .activity:only-child .people .face,
+  .calendar.short-view .activities > .activity .people .face,
+  .calendar.short-view .activities > .activity:only-child .people .face{
+    width:min(72px, calc((100cqw - 12px) / var(--people-count)));
+    height:min(72px, calc((100cqw - 12px) / var(--people-count)));
+    font-size:min(72px, calc((100cqw - 12px) / var(--people-count)))
+  }
+}
+
+/* Keep the editable desktop calendar compact as activity counts grow. */
+@media screen and (min-width:901px){
+  .shell:not(.fullscreen-calendar) .activities > .activity .activity-emoji,
+  .shell:not(.fullscreen-calendar) .simultaneous-cards .activity .activity-emoji{
+    width:min(50px, 100%);height:50px;min-height:50px;font-size:48px
+  }
+  .shell:not(.fullscreen-calendar) .activities > .activity .people .face,
+  .shell:not(.fullscreen-calendar) .activities > .activity:only-child .people .face{
+    width:min(44px, calc((100cqw - 12px) / var(--people-count)));
+    height:min(44px, calc((100cqw - 12px) / var(--people-count)));
+    font-size:min(44px, calc((100cqw - 12px) / var(--people-count)))
+  }
+  .shell:not(.fullscreen-calendar) .simultaneous-cards .activity-open{grid-template-rows:50px 2em 1fr;padding-top:4px}
+  .shell:not(.fullscreen-calendar) .simultaneous-cards .activity .people .face{
+    width:min(34px, 96cqw);height:min(34px, 96cqw);font-size:min(34px, 96cqw)
+  }
+}
+
+/* Shared face minimum for standalone and grouped cards in every view. */
+.activity{--activity-face-min:55px}
+.activity .people .face{min-width:var(--activity-face-min);min-height:var(--activity-face-min)}
+.activity .people .face .member-glyph{font-size:max(var(--activity-face-min), 1em)}
+
+/* Wrap faces instead of letting them extend beyond an activity card. */
+.activity .people{max-width:100%;flex-wrap:wrap}
+@media screen{
+  .fullscreen-calendar .activities > .activity .people,
+  .shell:not(.fullscreen-calendar) .activities > .activity .people{flex-wrap:wrap}
+}
+@media print{
+  .activities > .activity .people{flex-wrap:wrap}
+}
+
+/* Let wrapped faces determine the space needed in full-screen and print rows. */
+@media screen{
+  .fullscreen-calendar .calendar{
+    height:auto;min-height:100%;
+    grid-template-rows:34px minmax(max-content,var(--fullscreen-morning-weight,1fr)) minmax(max-content,var(--fullscreen-afternoon-weight,1fr)) minmax(max-content,var(--fullscreen-night-weight,1fr))
+  }
+  .fullscreen-calendar .part,.fullscreen-calendar .activities,.fullscreen-calendar .activities > .activity{overflow:visible}
+  .fullscreen-calendar .activities{flex:1 0 auto;min-height:auto}
+  .fullscreen-calendar .activities > .activity{container-type:inline-size;flex:1 0 auto;min-height:108px}
+  .fullscreen-calendar .simultaneous-group{flex:1 0 auto}
+  .fullscreen-calendar .simultaneous-cards > .activity{container-type:inline-size}
+  .fullscreen-calendar .simultaneous-cards .activity-open{grid-template-rows:auto auto 1fr;padding-top:10px}
+  .fullscreen-calendar .simultaneous-cards .activity .people .face{width:min(72px, 96cqw);height:min(72px, 96cqw);font-size:min(72px, 96cqw)}
+  .fullscreen-calendar .activities > .activity .people .face,
+  .fullscreen-calendar .activities > .activity:only-child .people .face,
+  .fullscreen-calendar .hide-words .activities > .activity .people .face{
+    width:min(72px, calc((100cqw - 12px) / var(--people-count)));
+    height:min(72px, calc((100cqw - 12px) / var(--people-count)));
+    font-size:min(72px, calc((100cqw - 12px) / var(--people-count)))
+  }
+}
+@media print{
+  .activities > .activity,.simultaneous-group,.simultaneous-cards > .activity{min-height:max-content;overflow:visible}
+  .simultaneous-cards .activity-open{grid-template-rows:auto auto 1fr}
+}

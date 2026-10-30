@@ -5,14 +5,14 @@ import {
   pointerWithin, rectIntersection, TouchSensor, useDroppable, useSensor, useSensors,
   type CollisionDetection, type DragEndEvent, type DragMoveEvent, type DragOverEvent, type DragStartEvent,
 } from '@dnd-kit/core';
-import { defaultAnimateLayoutChanges, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import {
-  days, defaultFamily, familyIcon, familyStorageKey, findActivity, icons, moveActivity, newActivityId, newPersonId, parts, previousFamilyIcon, readFamily, readWeek,
-  sampleWeekForFamily, storageKey,
+  days, defaultFamily, familyIcon, familyStorageKey, findActivity, groupActivity, icons, moveActivity, newActivityId, newPersonId, parts, previousFamilyIcon, readFamily, readWeek,
+  printActivityWeight, sampleWeekForFamily, sortGroupedActivities, storageKey,
   type Activity, type ActivityDestination, type ActivityPosition, type Family, type PartId, type PersonId, type WeekPlan,
 } from './planner';
 import { findOpenMoji, openMojiUrl, searchOpenMoji, type OpenMojiIcon } from './openmoji';
+import { CSS } from '@dnd-kit/utilities';
 import { fitImageScale, imageFromFile, isCustomIcon, readCustomIcons, saveCustomIcons, validateIconFile, type CustomIcon, type IconScope } from './customIcons';
 import { calendarSettingsKey, readCalendarSettings, visibleDays, type CalendarSettings, type VisibleDay, type WeekStart } from './calendarView';
 import { createBackup, parseBackup, saveBackup, type PlannerBackup } from './backup';
@@ -72,20 +72,22 @@ function IconPicture({ emoji, className }: { emoji: string; className: string })
   return <span className={className} aria-hidden="true">{url ? <img src={url} alt="" /> : emoji}</span>;
 }
 
-function ActivityCard({ day, part, index, activity, onEdit, onDelete }: {
-  day: number; part: PartId; index: number; activity: Activity; onEdit: () => void; onDelete: () => void;
+type DropPreview = { id: string; mode: 'before' | 'after' | 'group' };
+
+function ActivityCard({ day, part, index, activity, onEdit, onDelete, dropPreview, dragging }: {
+  day: number; part: PartId; index: number; activity: Activity; onEdit: () => void; onDelete: () => void; dropPreview: DropPreview | null; dragging: Activity | null;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, isDragging, transform, transition } = useSortable({
     id: activity.id,
     data: { type: 'activity', day, part, index },
-    animateLayoutChanges: args => args.isSorting || args.wasDragging ? defaultAnimateLayoutChanges(args) : true,
   });
-  return <div ref={setNodeRef} className={`activity ${isDragging ? 'is-dragging' : ''}`}
-    style={{ transform: CSS.Transform.toString(transform), transition }}>
-    <button type="button" className="activity-open" onClick={onEdit}
+  return <div ref={setNodeRef} className={`activity ${isDragging ? 'is-dragging' : ''} ${dropPreview?.id === activity.id ? `drop-${dropPreview.mode}` : ''}`} style={{ '--people-count': Math.max(1, activity.who.length) } as CSSProperties}>
+    <button type="button" className="activity-open" style={{ transform: dropPreview && dropPreview.mode !== 'group' ? CSS.Transform.toString(transform) : undefined, transition }} onClick={onEdit}
       title={`Edit or move ${activity.label}`} {...attributes} {...listeners}>
       <ActivityContent activity={activity} />
     </button>
+    {dragging && dragging.id !== activity.id && <GroupDropTarget id={activity.id} />}
+    {dropPreview?.id === activity.id && dropPreview.mode !== 'group' && <span className={`drop-indicator ${dropPreview.mode}`} aria-hidden="true" />}
     <button type="button" className="activity-delete" onClick={onDelete}
       aria-label={`Delete ${activity.label || 'activity'}`} title={`Delete ${activity.label || 'activity'}`}>
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -95,15 +97,34 @@ function ActivityCard({ day, part, index, activity, onEdit, onDelete }: {
   </div>;
 }
 
-function DayPart({ day, part, activities, onEdit, onDelete }: {
-  day: number; part: typeof parts[number]; activities: Activity[]; onEdit: (target: EditTarget) => void; onDelete: (activity: Activity) => void;
+function GroupDropTarget({ id }: { id: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `group-target:${id}`, data: { type: 'group-target', activityId: id } });
+  return <div ref={setNodeRef} className={`group-drop-target ${isOver ? 'is-over' : ''}`} aria-label="Group activities" />;
+}
+
+function GroupDropEdge({ day, part, id, edge }: { day: number; part: PartId; id: string; edge: 'before' | 'after' }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `group-edge:${day}:${part}:${id}:${edge}`, data: { type: 'group-edge', day, part, groupActivityId: id, edge } });
+  return <div ref={setNodeRef} className={`group-drop-edge ${edge} ${isOver ? 'is-over' : ''}`}><span>Drop here to move {edge === 'before' ? 'above' : 'below'}</span></div>;
+}
+
+function DayPart({ day, part, activities, onEdit, onDelete, dropPreview, dragging }: {
+  day: number; part: typeof parts[number]; activities: Activity[]; onEdit: (target: EditTarget) => void; onDelete: (activity: Activity) => void; dropPreview: DropPreview | null; dragging: Activity | null;
 }) {
+  const members = useContext(FamilyContext).members;
   const { setNodeRef, isOver } = useDroppable({ id: slotId(day, part.id), data: { type: 'slot', day, part: part.id } });
   return <section ref={setNodeRef} className={`part ${part.id} ${isOver ? 'drop-target' : ''}`} aria-label={`${days[day]} ${part.name}`}>
     <div className="part-head"><span className="symbol" aria-hidden="true">{part.emoji}</span>{part.name}</div>
     <SortableContext items={activities.map(activity => activity.id)} strategy={verticalListSortingStrategy}>
       <div className="activities" data-count={activities.length}>
-        {activities.map((activity, index) => <ActivityCard key={activity.id} day={day} part={part.id} index={index} activity={activity} onEdit={() => onEdit({ day, part: part.id, index })} onDelete={() => onDelete(activity)} />)}
+        {activities.map((activity) => {
+          const group = activity.simultaneousId ? activities.filter(item => item.simultaneousId === activity.simultaneousId) : [];
+          if (group.length > 1 && group[0].id !== activity.id) return null;
+          const card = (item: Activity) => {
+            const itemIndex = activities.indexOf(item);
+            return <ActivityCard key={item.id} day={day} part={part.id} index={itemIndex} activity={item} dropPreview={dropPreview} dragging={dragging} onEdit={() => onEdit({ day, part: part.id, index: itemIndex })} onDelete={() => onDelete(item)} />;
+          };
+          return group.length > 1 ? <div className={`simultaneous-group ${dragging ? 'group-dragging' : ''}`} key={activity.id}>{dragging && <GroupDropEdge day={day} part={part.id} id={activity.id} edge="before" />}<div className="simultaneous-cards">{sortGroupedActivities(group, members).map(card)}</div>{dragging && <GroupDropEdge day={day} part={part.id} id={activity.id} edge="after" />}</div> : card(activity);
+        })}
       </div>
     </SortableContext>
     <button type="button" className="add" onClick={() => onEdit({ day, part: part.id, index: null })} title={`Add an activity to ${days[day]} ${part.name}`}>+ Add</button>
@@ -120,14 +141,13 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const [dragging, setDragging] = useState<Activity | null>(null);
+  const [dropHint, setDropHint] = useState('');
+  const [dropPreview, setDropPreview] = useState<DropPreview | null>(null);
   const [activeDay, setActiveDay] = useState(displayedDays[0].index);
   const dayNav = useRef<HTMLElement>(null);
   const desktopDayHeaders = useRef<HTMLDivElement>(null);
-  const [preview, setPreview] = useState<WeekPlan | null>(null);
   const originalWeek = useRef<WeekPlan | null>(null);
   const activeId = useRef<string | null>(null);
-  const previewWeek = useRef<WeekPlan | null>(null);
-  const previewKey = useRef<string | null>(null);
   const suppressDragClick = useRef(false);
 
   useEffect(() => {
@@ -151,7 +171,11 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
 
   const collisionDetection: CollisionDetection = args => {
     const pointerHits = pointerWithin(args);
-    const cardHits = pointerHits.filter(hit => args.droppableContainers.find(container => container.id === hit.id)?.data.current?.type === 'activity');
+    const groupHits = pointerHits.filter(hit => args.droppableContainers.find(container => container.id === hit.id)?.data.current?.type === 'group-target');
+    if (groupHits.length) return groupHits;
+    const edgeHits = pointerHits.filter(hit => args.droppableContainers.find(container => container.id === hit.id)?.data.current?.type === 'group-edge');
+    if (edgeHits.length) return edgeHits;
+    const cardHits = pointerHits.filter(hit => hit.id !== args.active.id && args.droppableContainers.find(container => container.id === hit.id)?.data.current?.type === 'activity');
     return cardHits.length ? cardHits : pointerHits.length ? pointerHits : (args.pointerCoordinates ? rectIntersection(args) : closestCenter(args));
   };
 
@@ -168,11 +192,18 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
     suppressDragClick.current = true;
     window.setTimeout(() => { suppressDragClick.current = false; }, 0);
     setDragging(null);
-    setPreview(null);
-    previewWeek.current = null;
-    previewKey.current = null;
+    setDropHint('');
+    setDropPreview(null);
     originalWeek.current = null;
     activeId.current = null;
+  }
+
+  function pointerY(event: DragMoveEvent | DragOverEvent | DragEndEvent): number | undefined {
+    const origin = event.activatorEvent;
+    if ('clientY' in origin && typeof origin.clientY === 'number') return origin.clientY + event.delta.y;
+    if ('touches' in origin && origin.touches instanceof TouchList && origin.touches.length) return origin.touches[0].clientY + event.delta.y;
+    const rect = event.active.rect.current.translated;
+    return rect ? rect.top + rect.height / 2 : undefined;
   }
 
   function destinationFor(event: DragMoveEvent | DragOverEvent | DragEndEvent): ActivityDestination | undefined {
@@ -185,41 +216,48 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
     const target = over.data.current as (
       | (ActivityPosition & { type: 'activity' })
       | ({ day: number; part: PartId; type: 'slot' })
+      | ({ day: number; part: PartId; type: 'group-edge'; groupActivityId: string; edge: 'before' | 'after' })
     ) | undefined;
     if (!target) return;
     if (target.type === 'slot') return { day: target.day, part: target.part, index: null };
+    if (target.type === 'group-edge') {
+      const items = original[target.day][target.part];
+      const group = items.find(item => item.id === target.groupActivityId)?.simultaneousId;
+      const indexes = items.map((item, index) => group && item.simultaneousId === group ? index : -1).filter(index => index >= 0);
+      if (!indexes.length) return;
+      let index = target.edge === 'before' ? Math.min(...indexes) : Math.max(...indexes) + 1;
+      if (source.day === target.day && source.part === target.part && source.index < index) index--;
+      return { day: target.day, part: target.part, index };
+    }
     const targetPosition = findActivity(original, String(over.id));
     if (!targetPosition) return;
-    const draggedCenter = event.active.rect.current.translated
-      ? event.active.rect.current.translated.top + event.active.rect.current.translated.height / 2
-      : over.rect.top;
-    const after = draggedCenter > over.rect.top + over.rect.height / 2;
-    let index = targetPosition.index + Number(after);
+    const after = (pointerY(event) ?? over.rect.top) > over.rect.top + over.rect.height / 2;
+    const targetActivity = original[targetPosition.day][targetPosition.part][targetPosition.index];
+    const items = original[targetPosition.day][targetPosition.part];
+    const groupIndexes = targetActivity.simultaneousId ? items.map((item, index) => item.simultaneousId === targetActivity.simultaneousId ? index : -1).filter(index => index >= 0) : [targetPosition.index];
+    let index = after ? Math.max(...groupIndexes) + 1 : Math.min(...groupIndexes);
     if (source.day === targetPosition.day && source.part === targetPosition.part && source.index < index) index--;
     return { day: targetPosition.day, part: targetPosition.part, index };
+  }
+
+  function groupTarget(event: DragMoveEvent | DragOverEvent | DragEndEvent): string | undefined {
+    const target = event.over?.data.current;
+    return target?.type === 'group-target' && target.activityId !== activeId.current ? target.activityId as string : undefined;
   }
 
   function updatePreview(event: DragMoveEvent | DragOverEvent) {
     const original = originalWeek.current;
     const id = activeId.current;
     const destination = destinationFor(event);
-    if (!original || !id || !destination) return;
-    const source = findActivity(original, id);
-    if (!source) return;
-    if (source.day === destination.day && source.part === destination.part) {
-      if (previewWeek.current) {
-        previewWeek.current = null;
-        previewKey.current = null;
-        setPreview(null);
-      }
-      return;
-    }
-    const key = `${destination.day}:${destination.part}:${destination.index ?? 'end'}`;
-    if (previewKey.current === key) return;
-    const next = moveActivity(original, source, destination);
-    previewWeek.current = next;
-    previewKey.current = key;
-    setPreview(next);
+    const group = groupTarget(event);
+    setDropHint(group ? 'Drop to do these at the same time' : destination ? 'Drop to move the activity here' : '');
+    if (group) { setDropPreview({ id: group, mode: 'group' }); return; }
+    if (!original || !id || !destination || !event.over) { setDropPreview(null); return; }
+    if (event.over.data.current?.type === 'activity') {
+      const mode = group ? 'group' : (pointerY(event) ?? event.over.rect.top) < event.over.rect.top + event.over.rect.height / 2 ? 'before' : 'after';
+      setDropPreview({ id: String(event.over.id), mode });
+    } else setDropPreview(null);
+
   }
 
   function dragEnd(event: DragEndEvent) {
@@ -228,8 +266,9 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
     const source = original && id ? findActivity(original, id) : undefined;
     const destination = destinationFor(event);
     if (original && source && id && event.over) {
-      if (destination) onCommit(original, moveActivity(original, source, destination), id);
-      else if (String(event.over.id) === id && previewWeek.current) onCommit(original, previewWeek.current, id);
+      const group = groupTarget(event);
+      if (group) onCommit(original, groupActivity(original, id, group), id);
+      else if (destination) onCommit(original, moveActivity(original, source, destination), id);
     }
     clearDrag();
   }
@@ -283,14 +322,14 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
     };
   }, []);
 
-  const visibleWeek = preview ?? week;
-  const printRowWeights = parts.map(part => Math.max(0, ...displayedDays.map(({ index }) => visibleWeek[index][part.id].length)) + 0.4);
+  const visibleWeek = week;
+  const printRowWeights = parts.map(part => Math.max(0, ...displayedDays.map(({ index }) => printActivityWeight(visibleWeek[index][part.id]))) + 0.4);
   const printRowTotal = printRowWeights.reduce((total, weight) => total + weight, 0);
   const printRowHeights = Object.fromEntries(parts.map((part, index) =>
     [`--print-${part.id}-height`, `${(183 * printRowWeights[index] / printRowTotal).toFixed(2)}mm`]
   ));
-  const fullscreenRowWeights = Object.fromEntries(parts.map((part, index) =>
-    [`--fullscreen-${part.id}-weight`, `${printRowWeights[index]}fr`]
+  const fullscreenRowWeights = Object.fromEntries(parts.map(part =>
+    [`--fullscreen-${part.id}-weight`, `${Math.max(0, ...displayedDays.map(({ index: day }) => visibleWeek[day][part.id].length)) + 0.4}fr`]
   ));
   return <>
     <div className="desktop-day-bar" aria-hidden="true">
@@ -308,8 +347,9 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
     <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={dragStart} onDragMove={updatePreview} onDragOver={updatePreview} onDragEnd={dragEnd} onDragCancel={clearDrag}>
       {displayedDays.map(({ index: dayIndex, label, date }) => <article className="day" id={`day-${dayIndex}`} key={dayIndex}>
         <div className="day-head"><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>
-        {parts.map(part => <DayPart key={part.id} day={dayIndex} part={part} activities={visibleWeek[dayIndex][part.id]} onEdit={edit} onDelete={onDelete} />)}
+        {parts.map(part => <DayPart key={part.id} day={dayIndex} part={part} activities={visibleWeek[dayIndex][part.id]} dropPreview={dropPreview} dragging={dragging} onEdit={edit} onDelete={onDelete} />)}
       </article>)}
+      {dragging && dropHint && <div className="drag-hint" role="status">{dropHint}</div>}
       {createPortal(<DragOverlay dropAnimation={null}>{dragging && <div className="activity drag-overlay"><ActivityContent activity={dragging} /></div>}</DragOverlay>, document.body)}
     </DndContext>
   </div></section></>;
@@ -492,10 +532,18 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose, onA
   const [who, setWho] = useState<PersonId[]>(activity.who);
   const [destinationDay, setDestinationDay] = useState(target.day);
   const [destinationPart, setDestinationPart] = useState<PartId>(target.part);
+  const [parallelWith, setParallelWith] = useState(() => activity.simultaneousId ? week[target.day][target.part].find(item => item.id !== activity.id && item.simultaneousId === activity.simultaneousId)?.id ?? '' : '');
   const [position, setPosition] = useState(target.index ?? week[target.day][target.part].length);
   const availableActivities = (day: number, part: PartId) => week[day][part].filter((_, index) =>
     !(target.index !== null && target.day === day && target.part === part && target.index === index));
   const destinationActivities = availableActivities(destinationDay, destinationPart);
+  const parallelOptions = destinationActivities.reduce<Activity[][]>((groups, item) => {
+    const group = item.simultaneousId && groups.find(items => items[0].simultaneousId === item.simultaneousId);
+    if (group) group.push(item);
+    else groups.push([item]);
+    return groups;
+  }, []);
+  const selectedParallel = parallelOptions.find(group => group.some(item => item.id === parallelWith))?.[0].id ?? '';
   const usedIcons = new Map<string, number>();
   for (const day of week) for (const part of parts) for (const item of day[part.id]) {
     usedIcons.set(item.icon, (usedIcons.get(item.icon) ?? 0) + 1);
@@ -535,9 +583,14 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose, onA
   }
 
   function save() {
+    const companion = destinationActivities.find(item => item.id === parallelWith);
+    const groupId = companion?.simultaneousId || companion?.id;
+    const insertionIndex = companion
+      ? destinationActivities.reduce((last, item, index) => item.id === companion.id || (groupId && item.simultaneousId === groupId) ? index + 1 : last, 0)
+      : Math.min(position, destinationActivities.length);
     onSave(
-      { id: activity.id, icon, label: label.trim() || icons.find(([value]) => value === icon)?.[1] || findOpenMoji(icon)?.name || customIcons.find(item => item.id === icon)?.name || 'Activity', who },
-      { day: destinationDay, part: destinationPart, index: Math.min(position, destinationActivities.length) },
+      { id: activity.id, icon, simultaneousId: companion ? (companion.simultaneousId || companion.id) : undefined, label: label.trim() || icons.find(([value]) => value === icon)?.[1] || findOpenMoji(icon)?.name || customIcons.find(item => item.id === icon)?.name || 'Activity', who },
+      { day: destinationDay, part: destinationPart, index: insertionIndex },
     );
   }
 
@@ -587,10 +640,14 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose, onA
           setDestinationPart(part);
           setPosition(availableActivities(destinationDay, part).length);
         }}>{parts.map(part => <option key={part.id} value={part.id}>{part.name}</option>)}</select></label>
-        <label className="hint destination-position">Position<select className="mini-input" aria-label="Position" value={position} onChange={event => setPosition(Number(event.target.value))}>
+        <label className="hint destination-position">At the same time as<select className="mini-input" value={selectedParallel} onChange={event => setParallelWith(event.target.value)}>
+          <option value="">No other activity</option>
+          {parallelOptions.map(group => <option key={group[0].id} value={group[0].id}>{sortGroupedActivities(group, members).map(item => item.label).join(' + ')}</option>)}
+        </select></label>
+        {!selectedParallel && <label className="hint destination-position">Position<select className="mini-input" aria-label="Position" value={position} onChange={event => setPosition(Number(event.target.value))}>
           <option value={0}>First</option>
           {destinationActivities.map((item, index) => <option key={index} value={index + 1}>After {item.label}</option>)}
-        </select></label>
+        </select></label>}
       </div>
     </div>
     <div className="modal-foot">
@@ -795,6 +852,16 @@ export default function App() {
     setFullscreen(enabled);
   }
 
+  useEffect(() => {
+    if (!fullscreen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || document.querySelector('dialog[open]')) return;
+      changeFullscreen(false);
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [fullscreen]);
+
   useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify(week)); } catch { /* Private browsing can block storage. */ } }, [week]);
   useEffect(() => { try { localStorage.setItem(familyStorageKey, JSON.stringify(family)); } catch { /* Private browsing can block storage. */ } }, [family]);
   useEffect(() => { try { localStorage.setItem(calendarSettingsKey, JSON.stringify(calendarSettings)); } catch { /* Private browsing can block storage. */ } }, [calendarSettings]);
@@ -852,7 +919,12 @@ export default function App() {
     if (!target) return;
     const next = structuredClone(week);
     if (target.index !== null) next[target.day][target.part].splice(target.index, 1);
-    next[destination.day][destination.part].splice(destination.index ?? next[destination.day][destination.part].length, 0, activity);
+    const destinationItems = next[destination.day][destination.part];
+    if (activity.simultaneousId) {
+      const companion = destinationItems.find(item => item.id === activity.simultaneousId || item.simultaneousId === activity.simultaneousId);
+      if (companion) companion.simultaneousId = activity.simultaneousId;
+    }
+    destinationItems.splice(destination.index ?? destinationItems.length, 0, activity);
     setWeek(next);
     if (target.index !== null) showMove(week, next, activity.id);
     else setUndoMove(null);
@@ -978,7 +1050,7 @@ export default function App() {
     </header>
     {fullscreen && <div className="fullscreen-toolbar"><button className="btn" type="button" onClick={() => changeFullscreen(false)}>✕ Exit full screen</button></div>}
     <Legend />
-    <div className="intro">Tap an activity to edit it. Drag it to another spot to move it (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
+    <div className="intro">Tap an activity to edit it. Drag onto the highlighted area to group activities, or above or below to move them apart (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
     <Calendar week={week} displayedDays={displayedDays} onEdit={setTarget} onDelete={deleteActivityById} onCommit={commitMove} />
     <p className="smallnote">Each time-of-day row fits its activities · Example activities only · Changes save on this device · A4 landscape print · Icons by <a href="https://openmoji.org/">OpenMoji</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>)</p>
     {showBackToTop && <button className="back-to-top" type="button" aria-label="Back to top" title="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })}><span aria-hidden="true">↑</span></button>}
