@@ -302,7 +302,7 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .activity .people { gap:4px }
   .activity .people .face,
   .activities > .activity:only-child .people .face,
-  .hide-words .activity .people .face { width:48px; height:48px; font-size:48px; background:transparent }
+  .hide-words .activity .people .face { width:52px; height:52px; font-size:52px; background:transparent }
 }
 @media print {
   .activity .people .face,
@@ -310,4 +310,13 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .hide-words .activity .people .face { width:9mm; height:9mm; font-size:28px; background:transparent }
   .calendar.short-view .activity .people .face,
   .calendar.short-view .activities > .activity:only-child .people .face { width:10mm; height:10mm; font-size:32px }
+}
+
+.desktop-day-bar{display:none}
+@media screen and (min-width:901px){
+  .desktop-day-bar{display:block;position:sticky;top:0;z-index:6;width:100%;padding-bottom:9px;overflow:hidden;background:var(--body)}
+  .desktop-day-bar-inner{display:grid;grid-template-columns:repeat(var(--calendar-columns,7),minmax(0,1fr));gap:9px;min-width:calc(var(--calendar-columns,7) * 176px + (var(--calendar-columns,7) - 1) * 9px)}
+  .desktop-day-bar .day-head{height:48px}
+  .calendar{grid-template-rows:repeat(3,max-content)}
+  .calendar .day-head{display:none}
 }

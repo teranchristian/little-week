@@ -114,6 +114,7 @@ function Calendar({ week, displayedDays, onEdit, onCommit }: {
   const [dragging, setDragging] = useState<Activity | null>(null);
   const [activeDay, setActiveDay] = useState(displayedDays[0].index);
   const dayNav = useRef<HTMLElement>(null);
+  const desktopDayHeaders = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<WeekPlan | null>(null);
   const originalWeek = useRef<WeekPlan | null>(null);
   const activeId = useRef<string | null>(null);
@@ -280,7 +281,15 @@ function Calendar({ week, displayedDays, onEdit, onCommit }: {
   const printRowHeights = Object.fromEntries(parts.map((part, index) =>
     [`--print-${part.id}-height`, `${(183 * printRowWeights[index] / printRowTotal).toFixed(2)}mm`]
   ));
-  return <section className="scroll" aria-label="Weekly family activities">
+  return <>
+    <div className="desktop-day-bar" aria-hidden="true">
+      <div ref={desktopDayHeaders} className="desktop-day-bar-inner" style={{ '--calendar-columns': displayedDays.length } as CSSProperties}>
+        {displayedDays.map(({ index, label, date }) => <div className="day-head" key={index}><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>)}
+      </div>
+    </div>
+    <section className="scroll" aria-label="Weekly family activities" onScroll={event => {
+      if (desktopDayHeaders.current) desktopDayHeaders.current.style.transform = `translateX(${-event.currentTarget.scrollLeft}px)`;
+    }}>
     <nav ref={dayNav} className="day-nav" aria-label="Jump to day">
       {displayedDays.map(({ index, label, date }) => <button key={index} type="button" className={activeDay === index ? 'active' : ''} aria-current={activeDay === index ? 'location' : undefined} onClick={() => document.getElementById(`day-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{label}{date && <span className="nav-date">{date.getDate()}</span>}</button>)}
     </nav>
@@ -292,7 +301,7 @@ function Calendar({ week, displayedDays, onEdit, onCommit }: {
       </article>)}
       {createPortal(<DragOverlay dropAnimation={null}>{dragging && <div className="activity drag-overlay"><ActivityContent activity={dragging} /></div>}</DragOverlay>, document.body)}
     </DndContext>
-  </div></section>;
+  </div></section></>;
 }
 
 function CustomIconDialog({ scope, existing, onSave, onClose }: {
