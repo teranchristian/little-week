@@ -313,6 +313,11 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
 }
 
 .desktop-day-bar{display:none}
+.activity-open{display:flex;flex:1 1 auto;flex-direction:inherit;align-items:inherit;justify-content:inherit;gap:inherit;min-width:0;width:100%;padding:0;border:0;border-radius:inherit;background:transparent;color:inherit;text-align:inherit;cursor:grab}
+.activity-open:active{cursor:grabbing}
+.activity-delete{position:absolute;top:4px;right:4px;z-index:1;display:grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:7px;background:transparent;color:#40544d;opacity:.48;cursor:pointer}
+.activity-delete:hover,.activity-delete:focus-visible{background:#fbe9e9;color:#a93737;opacity:1}
+@media print{.activity-delete{display:none!important}}
 @media screen and (min-width:901px){
   .desktop-day-bar{display:block;position:sticky;top:0;z-index:6;width:100%;padding-bottom:9px;overflow:hidden;background:var(--body)}
   .desktop-day-bar-inner{display:grid;grid-template-columns:repeat(var(--calendar-columns,7),minmax(0,1fr));gap:9px;min-width:calc(var(--calendar-columns,7) * 176px + (var(--calendar-columns,7) - 1) * 9px)}

@@ -72,38 +72,46 @@ function IconPicture({ emoji, className }: { emoji: string; className: string })
   return <span className={className} aria-hidden="true">{url ? <img src={url} alt="" /> : emoji}</span>;
 }
 
-function ActivityCard({ day, part, index, activity, onEdit }: {
-  day: number; part: PartId; index: number; activity: Activity; onEdit: () => void;
+function ActivityCard({ day, part, index, activity, onEdit, onDelete }: {
+  day: number; part: PartId; index: number; activity: Activity; onEdit: () => void; onDelete: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: activity.id,
     data: { type: 'activity', day, part, index },
     animateLayoutChanges: args => args.isSorting || args.wasDragging ? defaultAnimateLayoutChanges(args) : true,
   });
-  return <button ref={setNodeRef} type="button" className={`activity ${isDragging ? 'is-dragging' : ''}`}
-    style={{ transform: CSS.Transform.toString(transform), transition }}
-    onClick={onEdit} title={`Edit or move ${activity.label}`} {...attributes} {...listeners}>
-    <ActivityContent activity={activity} />
-  </button>;
+  return <div ref={setNodeRef} className={`activity ${isDragging ? 'is-dragging' : ''}`}
+    style={{ transform: CSS.Transform.toString(transform), transition }}>
+    <button type="button" className="activity-open" onClick={onEdit}
+      title={`Edit or move ${activity.label}`} {...attributes} {...listeners}>
+      <ActivityContent activity={activity} />
+    </button>
+    <button type="button" className="activity-delete" onClick={onDelete}
+      aria-label={`Delete ${activity.label || 'activity'}`} title={`Delete ${activity.label || 'activity'}`}>
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m5 4v6m4-6v6" />
+      </svg>
+    </button>
+  </div>;
 }
 
-function DayPart({ day, part, activities, onEdit }: {
-  day: number; part: typeof parts[number]; activities: Activity[]; onEdit: (target: EditTarget) => void;
+function DayPart({ day, part, activities, onEdit, onDelete }: {
+  day: number; part: typeof parts[number]; activities: Activity[]; onEdit: (target: EditTarget) => void; onDelete: (activity: Activity) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: slotId(day, part.id), data: { type: 'slot', day, part: part.id } });
   return <section ref={setNodeRef} className={`part ${part.id} ${isOver ? 'drop-target' : ''}`} aria-label={`${days[day]} ${part.name}`}>
     <div className="part-head"><span className="symbol" aria-hidden="true">{part.emoji}</span>{part.name}</div>
     <SortableContext items={activities.map(activity => activity.id)} strategy={verticalListSortingStrategy}>
       <div className="activities" data-count={activities.length}>
-        {activities.map((activity, index) => <ActivityCard key={activity.id} day={day} part={part.id} index={index} activity={activity} onEdit={() => onEdit({ day, part: part.id, index })} />)}
+        {activities.map((activity, index) => <ActivityCard key={activity.id} day={day} part={part.id} index={index} activity={activity} onEdit={() => onEdit({ day, part: part.id, index })} onDelete={() => onDelete(activity)} />)}
       </div>
     </SortableContext>
     <button type="button" className="add" onClick={() => onEdit({ day, part: part.id, index: null })} title={`Add an activity to ${days[day]} ${part.name}`}>+ Add</button>
   </section>;
 }
 
-function Calendar({ week, displayedDays, onEdit, onCommit }: {
-  week: WeekPlan; displayedDays: VisibleDay[]; onEdit: (target: EditTarget) => void;
+function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
+  week: WeekPlan; displayedDays: VisibleDay[]; onEdit: (target: EditTarget) => void; onDelete: (activity: Activity) => void;
   onCommit: (before: WeekPlan, after: WeekPlan, activityId: string) => void;
 }) {
   const sensors = useSensors(
@@ -297,7 +305,7 @@ function Calendar({ week, displayedDays, onEdit, onCommit }: {
     <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={dragStart} onDragMove={updatePreview} onDragOver={updatePreview} onDragEnd={dragEnd} onDragCancel={clearDrag}>
       {displayedDays.map(({ index: dayIndex, label, date }) => <article className="day" id={`day-${dayIndex}`} key={dayIndex}>
         <div className="day-head"><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>
-        {parts.map(part => <DayPart key={part.id} day={dayIndex} part={part} activities={visibleWeek[dayIndex][part.id]} onEdit={edit} />)}
+        {parts.map(part => <DayPart key={part.id} day={dayIndex} part={part} activities={visibleWeek[dayIndex][part.id]} onEdit={edit} onDelete={onDelete} />)}
       </article>)}
       {createPortal(<DragOverlay dropAnimation={null}>{dragging && <div className="activity drag-overlay"><ActivityContent activity={dragging} /></div>}</DragOverlay>, document.body)}
     </DndContext>
@@ -867,15 +875,24 @@ export default function App() {
     }
   }
 
-  function deleteActivity() {
-    if (!target || target.index === null) return;
+  function deleteActivityById(activity: Activity) {
+    if (!window.confirm(`Delete “${activity.label || 'this activity'}” from the calendar?`)) return;
     setUndoMove(null);
     setWeek(current => {
+      const position = findActivity(current, activity.id);
+      if (!position) return current;
       const next = structuredClone(current);
-      next[target.day][target.part].splice(target.index!, 1);
+      next[position.day][position.part].splice(position.index, 1);
       return next;
     });
     setTarget(null);
+  }
+
+  function deleteActivity() {
+    if (!target || target.index === null) return;
+    const activity = week[target.day][target.part][target.index];
+    if (!activity) return;
+    deleteActivityById(activity);
   }
 
   function reset() {
@@ -928,7 +945,7 @@ export default function App() {
     </header>
     <Legend />
     <div className="intro">Tap an activity to edit it. Drag it to another spot to move it (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
-    <Calendar week={week} displayedDays={displayedDays} onEdit={setTarget} onCommit={commitMove} />
+    <Calendar week={week} displayedDays={displayedDays} onEdit={setTarget} onDelete={deleteActivityById} onCommit={commitMove} />
     <p className="smallnote">Each time-of-day row fits its activities · Example activities only · Changes save on this device · A4 landscape print · Icons by <a href="https://openmoji.org/">OpenMoji</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>)</p>
     {showBackToTop && <button className="back-to-top" type="button" aria-label="Back to top" title="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })}><span aria-hidden="true">↑</span></button>}
     {target && initialActivity && <ActivityEditor target={target} activity={initialActivity} week={week} onSave={saveActivity} onDelete={deleteActivity} onClose={() => setTarget(null)} onAddCustomIcon={addCustomIcon} />}
