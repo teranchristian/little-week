@@ -426,6 +426,7 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
   return <>
     <div className="desktop-day-bar" aria-hidden="true">
       <div ref={desktopDayHeaders} className="desktop-day-bar-inner" style={{ '--calendar-columns': displayedDays.length } as CSSProperties}>
+        <div className="day-part-corner" />
         {displayedDays.map(({ index, label, date }) => <div className="day-head" key={index}><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>)}
       </div>
     </div>
@@ -436,6 +437,8 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
       {displayedDays.map(({ index, label, date }) => <button key={index} type="button" className={activeDay === index ? 'active' : ''} aria-current={activeDay === index ? 'location' : undefined} onClick={() => document.getElementById(`day-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{label}{date && <span className="nav-date">{date.getDate()}</span>}</button>)}
     </nav>
     <div className={`calendar ${displayedDays.length < 7 ? 'short-view' : ''}`} style={{ '--calendar-columns': displayedDays.length, ...printRowHeights, ...fullscreenRowWeights } as CSSProperties}>
+    <div className="calendar-corner" aria-hidden="true" />
+    {parts.map(part => <div className={`day-part-label ${part.id}`} key={part.id} aria-hidden="true"><span className="day-part-icon">{part.emoji}</span><span>{part.name}</span></div>)}
     <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={dragStart} onDragMove={updatePreview} onDragOver={updatePreview} onDragEnd={dragEnd} onDragCancel={clearDrag}>
       {displayedDays.map(({ index: dayIndex, label, date }) => <article className="day" id={`day-${dayIndex}`} key={dayIndex}>
         <div className="day-head"><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>

@@ -326,6 +326,12 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
 }
 
 .desktop-day-bar{display:none}
+.day-part-corner,.calendar-corner,.day-part-label{display:none}
+.day-part-label{flex-direction:column;align-items:center;justify-content:center;gap:8px;min-width:0;border-radius:15px;color:#263b3b;font-weight:800;text-align:center}
+.day-part-label.morning{background:#e9d5b3}
+.day-part-label.afternoon{background:#b8dcf1}
+.day-part-label.night{background:#d9c8ef}
+.day-part-icon{font-size:40px;line-height:1}
 .activity-open{display:flex;flex:1 1 auto;flex-direction:inherit;align-items:inherit;justify-content:inherit;gap:inherit;min-width:0;width:100%;padding:0;border:0;border-radius:inherit;background:transparent;color:inherit;text-align:inherit;cursor:grab}
 .activity-open:active{cursor:grabbing}
 .activity-delete{position:absolute;top:4px;right:4px;z-index:1;display:grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:7px;background:transparent;color:#40544d;opacity:.48;cursor:pointer}
@@ -365,13 +371,18 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .activity-details{gap:3px}
 }
 @media screen and (min-width:901px){
+  .shell:not(.fullscreen-calendar) .calendar,
+  .desktop-day-bar-inner{grid-template-columns:105px repeat(var(--calendar-columns,7),minmax(0,1fr));min-width:calc(105px + var(--calendar-columns,7) * 176px + var(--calendar-columns,7) * 9px)}
+  .day-part-corner{display:block}
+  .shell:not(.fullscreen-calendar) .day-part-label{display:flex;font-size:13px}
+  .shell:not(.fullscreen-calendar) .part-head{display:none}
   /* Share each row's available height across every card, regardless of activity count. */
   .shell:not(.fullscreen-calendar) .activities>.activity{flex:1 0 auto}
 }
 
 /* Keep all seven days visible on tablet landscape screens. */
 @media screen and (min-width:901px) and (max-width:1200px){
-  .calendar,.desktop-day-bar-inner{min-width:0}
+  .shell:not(.fullscreen-calendar) .calendar,.desktop-day-bar-inner{min-width:0;grid-template-columns:90px repeat(var(--calendar-columns,7),minmax(0,1fr))}
   .calendar,.desktop-day-bar-inner{gap:6px}
   .part{padding:8px 5px 9px}
   .activity .people{gap:2px}
@@ -392,7 +403,11 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .fullscreen-calendar .fullscreen-toolbar{display:flex;flex:none;justify-content:flex-end;align-items:center;height:42px;padding-bottom:6px}
   .fullscreen-calendar .fullscreen-toolbar .btn{min-height:36px;padding:6px 10px;font-size:12px}
   .fullscreen-calendar .scroll{flex:1 1 auto;min-height:0;width:100%;margin:0;padding:0;overflow:auto}
-  .fullscreen-calendar .calendar{display:grid;width:100%;min-width:700px;height:100%;gap:6px;grid-auto-flow:column;grid-template-columns:repeat(var(--calendar-columns,7),minmax(0,1fr));grid-template-rows:34px minmax(0,var(--fullscreen-morning-weight,1fr)) minmax(0,var(--fullscreen-afternoon-weight,1fr)) minmax(0,var(--fullscreen-night-weight,1fr))}
+  .fullscreen-calendar .calendar{display:grid;width:100%;min-width:700px;height:100%;gap:6px;grid-auto-flow:column;grid-template-columns:80px repeat(var(--calendar-columns,7),minmax(0,1fr));grid-template-rows:34px minmax(0,var(--fullscreen-morning-weight,1fr)) minmax(0,var(--fullscreen-afternoon-weight,1fr)) minmax(0,var(--fullscreen-night-weight,1fr))}
+  .fullscreen-calendar .calendar-corner{display:block}
+  .fullscreen-calendar .day-part-label{display:flex;gap:5px;border-radius:9px;font-size:12px}
+  .fullscreen-calendar .day-part-icon{font-size:32px}
+  .fullscreen-calendar .part-head{display:none}
   .fullscreen-calendar .day{display:contents}
   .fullscreen-calendar .calendar .day-head{display:flex;justify-content:center;height:34px;padding:4px;font-size:13px;border-radius:8px}
   .fullscreen-calendar .day-date{font-size:10px}
@@ -802,7 +817,11 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
 
 /* Use the same height-aware picture sizing on the printed page. */
 @media print{
-  .calendar{height:197.5mm;min-height:0;grid-template-rows:9mm minmax(0,var(--print-morning-height,61mm)) minmax(0,var(--print-afternoon-height,61mm)) minmax(0,var(--print-night-height,61mm))}
+  .calendar{height:197.5mm;min-height:0;grid-template-columns:18mm repeat(var(--calendar-columns,7),minmax(0,1fr));grid-template-rows:9mm minmax(0,var(--print-morning-height,61mm)) minmax(0,var(--print-afternoon-height,61mm)) minmax(0,var(--print-night-height,61mm))}
+  .calendar-corner{display:block}
+  .day-part-label{display:flex;gap:1.5mm;border-radius:7px;font-size:8px}
+  .day-part-icon{font-size:20px}
+  .part-head{display:none}
   .part{min-height:0;overflow:hidden}
   .activities{flex:1 1 0;min-height:0;overflow:hidden}
   .activities > .activity,.simultaneous-cards > .activity{container-type:size;min-height:0;overflow:hidden}
