@@ -84,7 +84,7 @@ function ActivityCard({ day, part, index, activity, onEdit, onDelete, dropPrevie
   const cardRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const card = cardRef.current;
-    if (!card || !card.closest('.simultaneous-cards')) return;
+    if (!card) return;
     const button = card.querySelector<HTMLElement>('.activity-open');
     const icon = card.querySelector<HTMLElement>('.activity-emoji');
     const name = card.querySelector<HTMLElement>('.activity-name');
@@ -92,18 +92,27 @@ function ActivityCard({ day, part, index, activity, onEdit, onDelete, dropPrevie
     if (!button || !icon || !people) return;
     const update = () => {
       const faces = people.querySelectorAll<HTMLElement>('.face');
-      if (faces.length < 2 || getComputedStyle(people).flexDirection !== 'column') {
+      const grouped = !!card.closest('.simultaneous-cards');
+      const vertical = getComputedStyle(people).flexDirection === 'column';
+      const aligned = getComputedStyle(button).flexDirection === 'column' && (grouped ? vertical : true);
+      if (!faces.length || !aligned) {
         card.classList.remove('stack-top');
         return;
       }
       const faceHeight = faces[0].offsetHeight;
       const faceGap = parseFloat(getComputedStyle(people).rowGap) || 0;
+      const remainingFaces = grouped
+        ? (faces.length - 1) * (faceHeight + faceGap)
+        : Math.max(0, ...Array.from(faces, face => face.offsetTop - faces[0].offsetTop));
+      if (!grouped) {
+        card.style.setProperty('--stack-first-face', `${faceHeight}px`);
+        card.style.setProperty('--stack-extra-faces', `${remainingFaces}px`);
+      }
       const buttonGap = parseFloat(getComputedStyle(button).rowGap) || 0;
       const details = card.querySelector<HTMLElement>('.activity-details');
       const detailsGap = name?.offsetHeight ? (parseFloat(getComputedStyle(details!).rowGap) || 0) : 0;
       // The centred layout has a spacer on each side of the icon and details.
       const baseline = icon.offsetHeight + (name?.offsetHeight || 0) + faceHeight + 3 * buttonGap + detailsGap;
-      const remainingFaces = (faces.length - 1) * (faceHeight + faceGap);
       card.classList.toggle('stack-top', remainingFaces > (button.clientHeight - baseline) / 2);
     };
     const observer = new ResizeObserver(update);

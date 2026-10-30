@@ -719,3 +719,24 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .fullscreen-calendar .simultaneous-cards:has(> .activity.stack-top) > .activity .activity-open::before{display:none}
 }
 
+/* Apply the same alignment to standalone cards with wrapped rows of faces. */
+@media screen and (min-width:901px), print{
+  .activities > .activity:has(.people .face) .activity-open,
+  .shell:not(.fullscreen-calendar) .activities > .activity:has(.people .face) .activity-open{justify-content:flex-start}
+  .activities > .activity:has(.people .face) .people{
+    height:var(--stack-first-face, auto);flex:none;align-content:flex-start
+  }
+  .activities > .activity:has(.people .face) .activity-open::before,
+  .activities > .activity:has(.people .face) .activity-open::after{content:'';flex:1 1 0;min-height:0}
+  .activities > .activity:has(.people .face) .activity-open::after{min-height:var(--stack-extra-faces, 0px)}
+  .activities > .activity.stack-top .activity-open::before{display:none}
+}
+@media screen{
+  .fullscreen-calendar .activities > .activity:has(.people .face) .activity-open{justify-content:flex-start}
+  .fullscreen-calendar .activities > .activity:has(.people .face) .people{height:var(--stack-first-face, auto);flex:none;align-content:flex-start}
+  .fullscreen-calendar .activities > .activity:has(.people .face) .activity-open::before,
+  .fullscreen-calendar .activities > .activity:has(.people .face) .activity-open::after{content:'';flex:1 1 0;min-height:0}
+  .fullscreen-calendar .activities > .activity:has(.people .face) .activity-open::after{min-height:var(--stack-extra-faces, 0px)}
+  .fullscreen-calendar .activities > .activity.stack-top .activity-open::before{display:none}
+}
+
