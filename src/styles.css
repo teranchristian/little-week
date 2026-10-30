@@ -787,3 +787,42 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .fullscreen-calendar .hide-words .activities > .activity .people .face{width:min(140px, 35cqh, calc((100cqw - 12px) / var(--people-count)));height:min(140px, 35cqh, calc((100cqw - 12px) / var(--people-count)));min-width:0;min-height:0;font-size:min(140px, 35cqh, calc((100cqw - 12px) / var(--people-count)))}
   .fullscreen-calendar .activity .people .face .member-glyph{font-size:1em}
 }
+
+/* Use the same height-aware picture sizing on the printed page. */
+@media print{
+  .calendar{height:197.5mm;min-height:0;grid-template-rows:9mm minmax(0,var(--print-morning-height,61mm)) minmax(0,var(--print-afternoon-height,61mm)) minmax(0,var(--print-night-height,61mm))}
+  .part{min-height:0;overflow:hidden}
+  .activities{flex:1 1 0;min-height:0;overflow:hidden}
+  .activities > .activity,.simultaneous-cards > .activity{container-type:size;min-height:0;overflow:hidden}
+  .activities > .activity{flex:1 1 0}
+  .simultaneous-group{flex:2 1 0;min-height:0;overflow:hidden}
+  .simultaneous-cards{min-height:0}
+  .simultaneous-cards > .activity{--picture-size:min(140px, 80cqw, max(0px, (100cqh - 30px) / (var(--people-count, 0) + 1)));--stack-face-height:var(--picture-size)}
+  .simultaneous-cards .activity .activity-emoji,
+  .calendar.short-view .simultaneous-cards .activity .activity-emoji,
+  .simultaneous-cards .activity .people .face,
+  .calendar.short-view .simultaneous-cards .activity .people .face{width:var(--picture-size);height:var(--picture-size);min-width:0;min-height:0;font-size:var(--picture-size)}
+  .activities > .activity .activity-emoji,
+  .activities > .activity:only-child .activity-emoji,
+  .calendar.short-view .activities > .activity .activity-emoji,
+  .calendar.short-view .activities > .activity:only-child .activity-emoji{width:min(140px, 80cqw, 35cqh);height:min(140px, 80cqw, 35cqh);min-width:0;min-height:0;font-size:min(140px, 80cqw, 35cqh)}
+  .activities > .activity .people .face,
+  .activities > .activity:only-child .people .face,
+  .calendar.short-view .activities > .activity .people .face,
+  .calendar.short-view .activities > .activity:only-child .people .face{width:min(140px, 35cqh, calc((100cqw - 12px) / var(--people-count)));height:min(140px, 35cqh, calc((100cqw - 12px) / var(--people-count)));min-width:0;min-height:0;font-size:min(140px, 35cqh, calc((100cqw - 12px) / var(--people-count)))}
+  .activity .people .face .member-glyph{font-size:1em}
+}
+
+/* Print cards need their full face stacks in the normal content flow. */
+@media print{
+  .activities > .activity:has(.people .face) .activity-open,
+  .shell:not(.fullscreen-calendar) .activities > .activity:has(.people .face) .activity-open,
+  .simultaneous-cards > .activity:has(.people .face) .activity-open,
+  .shell:not(.fullscreen-calendar) .simultaneous-cards > .activity:has(.people .face) .activity-open{justify-content:safe center;min-height:0}
+  .activities > .activity:has(.people .face) .activity-open::before,
+  .activities > .activity:has(.people .face) .activity-open::after,
+  .simultaneous-cards > .activity:has(.people .face) .activity-open::before,
+  .simultaneous-cards > .activity:has(.people .face) .activity-open::after{display:none}
+  .activities > .activity:has(.people .face) .people,
+  .simultaneous-cards > .activity:has(.people .face) .people{height:auto;align-content:center}
+}
