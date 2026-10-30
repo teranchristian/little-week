@@ -266,7 +266,7 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
 }
 
 @media print{
-  .calendar{grid-template-rows:9mm minmax(var(--print-morning-height,61mm),auto) minmax(var(--print-afternoon-height,61mm),auto) minmax(var(--print-night-height,61mm),auto)}
+  .calendar{grid-template-rows:9mm max-content minmax(var(--print-afternoon-height,61mm),auto) minmax(var(--print-night-height,61mm),auto)}
   .activities>.activity{flex:1 0 auto;overflow:visible}
   .part,.activities{overflow:visible}
   .activity{flex-direction:column;gap:1mm;padding:2mm 1mm;align-items:center;justify-content:center}
@@ -620,8 +620,9 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
 /* Let wrapped faces determine the space needed in full-screen and print rows. */
 @media screen{
   .fullscreen-calendar .calendar{
+    width:100%;zoom:var(--fullscreen-scale,1);
     height:auto;min-height:100%;
-    grid-template-rows:34px minmax(max-content,var(--fullscreen-morning-weight,1fr)) minmax(max-content,var(--fullscreen-afternoon-weight,1fr)) minmax(max-content,var(--fullscreen-night-weight,1fr))
+    grid-template-rows:34px max-content minmax(max-content,var(--fullscreen-afternoon-weight,1fr)) minmax(max-content,var(--fullscreen-night-weight,1fr))
   }
   .fullscreen-calendar .part,.fullscreen-calendar .activities,.fullscreen-calendar .activities > .activity{overflow:visible}
   .fullscreen-calendar .activities{flex:1 0 auto;min-height:auto}
@@ -641,4 +642,5 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
 @media print{
   .activities > .activity,.simultaneous-group,.simultaneous-cards > .activity{min-height:max-content;overflow:visible}
   .simultaneous-cards .activity-open{grid-template-rows:auto auto 1fr}
+  .simultaneous-cards .activity{--activity-face-min:min(64px, 100cqw)}
 }

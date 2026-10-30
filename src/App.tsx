@@ -322,6 +322,32 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
     };
   }, []);
 
+  useEffect(() => {
+    const calendar = document.querySelector<HTMLElement>('.fullscreen-calendar .calendar');
+    const scroll = calendar?.closest<HTMLElement>('.scroll');
+    if (!calendar || !scroll) return;
+    const fit = () => {
+      calendar.style.removeProperty('--fullscreen-scale');
+      if (calendar.getBoundingClientRect().height <= scroll.clientHeight) return;
+      let lower = 0.01;
+      let upper = 1;
+      for (let i = 0; i < 14; i++) {
+        const scale = (lower + upper) / 2;
+        calendar.style.setProperty('--fullscreen-scale', String(scale));
+        if (calendar.getBoundingClientRect().height <= scroll.clientHeight) lower = scale;
+        else upper = scale;
+      }
+      calendar.style.setProperty('--fullscreen-scale', String(lower));
+    };
+    const observer = new ResizeObserver(fit);
+    observer.observe(scroll);
+    fit();
+    return () => {
+      observer.disconnect();
+      calendar.style.removeProperty('--fullscreen-scale');
+    };
+  });
+
   const visibleWeek = week;
   const printRowWeights = parts.map(part => Math.max(0, ...displayedDays.map(({ index }) => printActivityWeight(visibleWeek[index][part.id]))) + 0.4);
   const printRowTotal = printRowWeights.reduce((total, weight) => total + weight, 0);
