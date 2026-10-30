@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { calendarLimitError, printActivityWeight, findActivity, groupActivity, moveActivity, sortGroupedActivities, type WeekPlan } from '../src/planner.ts';
+import { calendarLimitError, sectionLayout, printActivityWeight, findActivity, groupActivity, moveActivity, sortGroupedActivities, type WeekPlan } from '../src/planner.ts';
 
 function week(): WeekPlan {
   const item = (id: string) => ({ id, icon: '🏠', label: id, who: [] });
@@ -40,16 +40,29 @@ test('print row count treats a simultaneous group as one vertical slot', () => {
   assert.equal(printActivityWeight([]), 0);
 });
 
-test('two activities fit a section, including when side by side', () => {
+test('one pair and one separate activity fill the two section slots', () => {
   const initial = week();
   initial[0].morning.pop();
   const paired = groupActivity(initial, 'a', 'b');
   assert.equal(calendarLimitError(initial, paired), null);
   const third = structuredClone(paired);
   third[0].morning.push({ id: 'c', icon: '🏠', label: 'c', who: [] });
-  assert.match(calendarLimitError(paired, third)!, /Only 2 activities/);
+  assert.equal(calendarLimitError(paired, third), null);
+  assert.deepEqual(sectionLayout(third[0].morning), { slots: 2, groupCount: 1, largestGroup: 2 });
+  const fourth = structuredClone(third);
+  fourth[0].morning.push({ id: 'd', icon: '🏠', label: 'd', who: [] });
+  assert.match(calendarLimitError(third, fourth)!, /Only 2 activities or groups/);
+  assert.match(calendarLimitError(third, groupActivity(third, 'c', 'b'))!, /Only 2 activities can be side by side/);
   const moved = moveActivity(initial, findActivity(initial, 'a')!, { day: 1, part: 'morning', index: null });
   assert.equal(calendarLimitError(initial, moved), null);
+});
+
+test('only one side-by-side group is allowed in a section', () => {
+  const initial = week();
+  initial[0].morning.push({ id: 'd', icon: '🏠', label: 'd', who: [] });
+  const firstPair = groupActivity(initial, 'a', 'b');
+  const secondPair = groupActivity(firstPair, 'c', 'd');
+  assert.match(calendarLimitError(firstPair, secondPair)!, /Only 1 side-by-side group/);
 });
 
 test('four faces fit; a fifth is rejected while older entries can be edited', () => {

@@ -7,7 +7,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import {
-  calendarLimitError, maxActivitiesPerSection, maxPeoplePerActivity, days, defaultFamily, familyIcon, familyStorageKey, findActivity, groupActivity, icons, moveActivity, newActivityId, newPersonId, parts, previousFamilyIcon, readFamily, readWeek,
+  calendarLimitError, maxActivitiesPerSection, maxPeoplePerActivity, sectionLayout, days, defaultFamily, familyIcon, familyStorageKey, findActivity, groupActivity, icons, moveActivity, newActivityId, newPersonId, parts, previousFamilyIcon, readFamily, readWeek,
   printActivityWeight, sampleWeekForFamily, sortGroupedActivities, storageKey,
   type Activity, type ActivityDestination, type ActivityPosition, type Family, type PartId, type PersonId, type WeekPlan,
 } from './planner';
@@ -153,8 +153,11 @@ function DayPart({ day, part, activities, onEdit, onDelete, dropPreview, draggin
   day: number; part: typeof parts[number]; activities: Activity[]; onEdit: (target: EditTarget) => void; onDelete: (activity: Activity) => void; dropPreview: DropPreview | null; dragging: Activity | null;
 }) {
   const members = useContext(FamilyContext).members;
+  const layout = sectionLayout(activities);
+  const sectionFull = layout.slots >= maxActivitiesPerSection;
+  const overLimit = layout.slots > maxActivitiesPerSection || layout.groupCount > 1 || layout.largestGroup > 2 || activities.some(item => item.who.length > maxPeoplePerActivity);
   const { setNodeRef, isOver } = useDroppable({ id: slotId(day, part.id), data: { type: 'slot', day, part: part.id } });
-  return <section ref={setNodeRef} className={`part ${part.id} ${isOver ? 'drop-target' : ''}`} aria-label={`${days[day]} ${part.name}`}>
+  return <section ref={setNodeRef} className={`part ${part.id} ${isOver ? 'drop-target' : ''}`} data-over-limit={overLimit ? 'true' : undefined} aria-label={`${days[day]} ${part.name}`}>
     <div className="part-head"><span className="symbol" aria-hidden="true">{part.emoji}</span>{part.name}</div>
     <SortableContext items={activities.map(activity => activity.id)} strategy={verticalListSortingStrategy}>
       <div className="activities" data-count={activities.length}>
@@ -169,7 +172,7 @@ function DayPart({ day, part, activities, onEdit, onDelete, dropPreview, draggin
         })}
       </div>
     </SortableContext>
-    <button type="button" className="add" disabled={activities.length >= maxActivitiesPerSection} onClick={() => onEdit({ day, part: part.id, index: null })} title={activities.length >= maxActivitiesPerSection ? 'This section already has 2 activities' : `Add an activity to ${days[day]} ${part.name}`}>{activities.length >= maxActivitiesPerSection ? '2 activities · full' : '+ Add'}</button>
+    <button type="button" className="add" disabled={sectionFull} onClick={() => onEdit({ day, part: part.id, index: null })} title={sectionFull ? 'This section already has 2 activities or groups' : `Add an activity to ${days[day]} ${part.name}`}>{sectionFull ? 'Section full' : '+ Add'}</button>
   </section>;
 }
 
@@ -713,7 +716,7 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose, onA
         }}>{parts.map(part => <option key={part.id} value={part.id}>{part.name}</option>)}</select></label>
         <label className="hint destination-position">At the same time as<select className="mini-input" value={selectedParallel} onChange={event => setParallelWith(event.target.value)}>
           <option value="">No other activity</option>
-          {parallelOptions.map(group => <option key={group[0].id} value={group[0].id} disabled={group.length >= maxActivitiesPerSection}>{sortGroupedActivities(group, members).map(item => item.label).join(' + ')}</option>)}
+          {parallelOptions.map(group => <option key={group[0].id} value={group[0].id} disabled={group.length >= maxActivitiesPerSection || sectionLayout(destinationActivities).groupCount >= 1}>{sortGroupedActivities(group, members).map(item => item.label).join(' + ')}</option>)}
         </select></label>
         {!selectedParallel && <label className="hint destination-position">Position<select className="mini-input" aria-label="Position" value={position} onChange={event => setPosition(Number(event.target.value))}>
           <option value={0}>First</option>
@@ -945,6 +948,20 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [calendarSettings.start]);
   const displayedDays = useMemo(() => visibleDays(calendarSettings, today), [calendarSettings, today]);
+  const crowdedSections = displayedDays.flatMap(({ index, label }) => parts
+    .filter(part => { const layout = sectionLayout(week[index][part.id]); return layout.slots > maxActivitiesPerSection || layout.groupCount > 1 || layout.largestGroup > 2; })
+    .map(part => `${label} ${part.name.toLowerCase()}`));
+  const oversizedActivities = displayedDays.flatMap(({ index }) => parts.flatMap(part =>
+    week[index][part.id].filter(activity => activity.who.length > maxPeoplePerActivity).map(activity =>
+      `${activity.label} (${activity.who.length}: ${activity.who.map(id => family.members.find(person => person.id === id)?.name ?? id).join(', ')})`)));
+  const canFitPage = crowdedSections.length === 0 && oversizedActivities.length === 0;
+  useEffect(() => {
+    if (!fullscreen || canFitPage) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('fullscreen');
+    window.history.replaceState(null, '', url);
+    setFullscreen(false);
+  }, [fullscreen, canFitPage]);
   useEffect(() => {
     if (!undoMove) return;
     const timeout = window.setTimeout(() => setUndoMove(current => current?.token === undoMove.token ? null : current), 6000);
@@ -1118,13 +1135,14 @@ export default function App() {
     ? { id: newActivityId(), icon: '🛝', label: 'Playground', who: family.members[0] ? [family.members[0].id] : [] }
     : week[target.day][target.part][target.index]);
 
-  return <FamilyContext.Provider value={family}><CustomIconsContext.Provider value={customIcons}><main className={`shell ${showBackToTop ? 'with-back-to-top' : ''} ${fullscreen ? 'fullscreen-calendar' : ''}`}>
+  return <FamilyContext.Provider value={family}><CustomIconsContext.Provider value={customIcons}><main className={`shell ${showBackToTop ? 'with-back-to-top' : ''} ${fullscreen && canFitPage ? 'fullscreen-calendar' : ''}`}>
     <header className="top">
       <div className="titleline"><img className="site-logo" src={`${import.meta.env.BASE_URL}logo/little-week.png`} alt="" /><div><h1>{family.name}</h1><p className="sub">The picture shows <strong>what</strong> we're doing. The little faces show <strong>who</strong> is doing it.</p></div></div>
-      <div className="actions"><button className="btn" type="button" onClick={() => setEditingFamily(true)}>👨‍👩‍👧‍👦 Edit family</button><button className="btn" type="button" onClick={() => setEditingCalendar(true)}>📅 Calendar view: {calendarSettings.start === 'today' ? 'Today' : calendarSettings.start === 'sunday' ? 'Sunday' : 'Monday'}</button><button className="btn" type="button" onClick={() => setEditingCustomIcons(true)}>🎨 Custom icons</button><button className="btn" type="button" onClick={() => setEditingBackup(true)}>💾 Backup</button><button className="btn" type="button" onClick={reset}>↺ Reset example</button><button className="btn" type="button" onClick={() => changeFullscreen(true)}>⛶ Full screen</button><button className="btn primary" type="button" onClick={() => window.print()}>🖨️ Print A4</button></div>
+      <div className="actions"><button className="btn" type="button" onClick={() => setEditingFamily(true)}>👨‍👩‍👧‍👦 Edit family</button><button className="btn" type="button" onClick={() => setEditingCalendar(true)}>📅 Calendar view: {calendarSettings.start === 'today' ? 'Today' : calendarSettings.start === 'sunday' ? 'Sunday' : 'Monday'}</button><button className="btn" type="button" onClick={() => setEditingCustomIcons(true)}>🎨 Custom icons</button><button className="btn" type="button" onClick={() => setEditingBackup(true)}>💾 Backup</button><button className="btn" type="button" onClick={reset}>↺ Reset example</button><button className="btn" type="button" disabled={!canFitPage} onClick={() => changeFullscreen(true)}>⛶ Full screen</button><button className="btn primary" type="button" disabled={!canFitPage} onClick={() => window.print()}>🖨️ Print A4</button></div>
     </header>
     {fullscreen && <div className="fullscreen-toolbar"><button className="btn" type="button" onClick={() => changeFullscreen(false)}>✕ Exit full screen</button></div>}
     <Legend />
+    {!canFitPage && <p className="calendar-limit-warning" role="status">Full screen and one-page print are available after you simplify the saved activities. {crowdedSections.length > 0 && `Review ${crowdedSections.join(', ')}: each section holds up to 2 activities or groups, with at most 1 group of 2. `}{oversizedActivities.length > 0 && `These activities have more than 4 people selected: ${oversizedActivities.join('; ')}. Deselect people until 4 remain in each. `}Your activities are still saved below.</p>}
     <div className="intro">Tap an activity to edit it. Drag onto the highlighted area to group activities, or above or below to move them apart (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
     <Calendar week={week} displayedDays={displayedDays} onEdit={setTarget} onDelete={deleteActivityById} onCommit={commitMove} />
     <p className="smallnote">Each time-of-day row fits its activities · Example activities only · Changes save on this device · A4 landscape print · Icons by <a href="https://openmoji.org/">OpenMoji</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>)</p>

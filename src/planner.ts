@@ -64,22 +64,35 @@ export interface Activity {
 export const maxActivitiesPerSection = 2;
 export const maxPeoplePerActivity = 4;
 
+export function sectionLayout(activities: Activity[]) {
+  const counts = new Map<string, number>();
+  for (const activity of activities) if (activity.simultaneousId)
+    counts.set(activity.simultaneousId, (counts.get(activity.simultaneousId) ?? 0) + 1);
+  const groups = [...counts.values()].filter(count => count > 1);
+  return {
+    slots: activities.length - groups.reduce((extra, count) => extra + count - 1, 0),
+    groupCount: groups.length,
+    largestGroup: Math.max(0, ...groups),
+  };
+}
+
 // Saved calendars may exceed newer limits; edits can repair them without losing data.
 export function calendarLimitError(before: WeekPlan, after: WeekPlan): string | null {
   for (let day = 0; day < after.length; day++) for (const part of parts) {
     const oldItems = before[day][part.id];
     const items = after[day][part.id];
-    if (items.length > Math.max(maxActivitiesPerSection, oldItems.length))
-      return 'Only 2 activities fit in each part of the day. Choose another section.';
+    const oldLayout = sectionLayout(oldItems);
+    const layout = sectionLayout(items);
+    if (layout.slots > Math.max(maxActivitiesPerSection, oldLayout.slots))
+      return 'Only 2 activities or groups fit in each part of the day. A group counts as one.';
+    if (layout.groupCount > Math.max(1, oldLayout.groupCount))
+      return 'Only 1 side-by-side group fits in each part of the day.';
+    if (layout.largestGroup > Math.max(2, oldLayout.largestGroup))
+      return 'Only 2 activities can be side by side in a group.';
     for (const item of items) {
       const oldItem = before.flatMap(dayPlan => parts.flatMap(dayPart => dayPlan[dayPart.id])).find(old => old.id === item.id);
       if (item.who.length > Math.max(maxPeoplePerActivity, oldItem?.who.length ?? 0))
         return 'Choose up to 4 people for an activity.';
-      if (!item.simultaneousId) continue;
-      const count = items.filter(other => other.simultaneousId === item.simultaneousId).length;
-      const oldCount = oldItems.filter(other => other.simultaneousId === item.simultaneousId).length;
-      if (count > Math.max(maxActivitiesPerSection, oldCount))
-        return 'Only 2 activities can be side by side.';
     }
   }
   return null;

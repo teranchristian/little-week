@@ -827,3 +827,7 @@ dialog[open]{display:flex;flex-direction:column;overflow:hidden}
   .activities > .activity:has(.people .face) .people,
   .simultaneous-cards > .activity:has(.people .face) .people{height:auto;align-content:center}
 }
+
+.calendar-limit-warning{margin:8px 0 14px;padding:12px 14px;border:1px solid #d4a55a;border-radius:12px;background:#fff3d5;color:#754316;font-size:13px;font-weight:700}
+.part[data-over-limit]{outline:2px solid #d4a55a;outline-offset:-2px}
+button:disabled{cursor:default;opacity:.55}
