@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { printActivityWeight, findActivity, groupActivity, moveActivity, sortGroupedActivities, type WeekPlan } from '../src/planner.ts';
+import { calendarLimitError, printActivityWeight, findActivity, groupActivity, moveActivity, sortGroupedActivities, type WeekPlan } from '../src/planner.ts';
 
 function week(): WeekPlan {
   const item = (id: string) => ({ id, icon: '🏠', label: id, who: [] });
@@ -38,4 +38,27 @@ test('print row count treats a simultaneous group as one vertical slot', () => {
   assert.equal(printActivityWeight(initial[0].morning), 3);
   assert.equal(printActivityWeight(grouped[0].morning), 2);
   assert.equal(printActivityWeight([]), 0);
+});
+
+test('two activities fit a section, including when side by side', () => {
+  const initial = week();
+  initial[0].morning.pop();
+  const paired = groupActivity(initial, 'a', 'b');
+  assert.equal(calendarLimitError(initial, paired), null);
+  const third = structuredClone(paired);
+  third[0].morning.push({ id: 'c', icon: '🏠', label: 'c', who: [] });
+  assert.match(calendarLimitError(paired, third)!, /Only 2 activities/);
+  const moved = moveActivity(initial, findActivity(initial, 'a')!, { day: 1, part: 'morning', index: null });
+  assert.equal(calendarLimitError(initial, moved), null);
+});
+
+test('four faces fit; a fifth is rejected while older entries can be edited', () => {
+  const initial = week();
+  initial[0].morning = [{ id: 'a', icon: '🏠', label: 'a', who: ['1', '2', '3', '4'] }];
+  const five = structuredClone(initial);
+  five[0].morning[0].who.push('5');
+  assert.match(calendarLimitError(initial, five)!, /up to 4 people/);
+  const edited = structuredClone(five);
+  edited[0].morning[0].label = 'edited';
+  assert.equal(calendarLimitError(five, edited), null);
 });

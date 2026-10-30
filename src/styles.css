@@ -16,6 +16,7 @@ dialog{border:0;border-radius:19px;box-shadow:0 24px 75px #183b3450;width:min(51
 
 .person-section-title{margin-top:20px}
 .person-section-heading{display:flex;align-items:baseline;gap:10px}
+.people-limit-warning{margin:8px 0;color:#865017;background:#fff3d5;border:1px solid #ebce8e;border-radius:9px;padding:8px 10px;font-size:12px;font-weight:700}
 .select-all-link{border:0;background:none;padding:0;color:var(--teal);font:inherit;text-decoration:underline;text-underline-offset:2px}
 .all-people{display:inline-flex;align-items:center;justify-content:center;gap:3px;white-space:nowrap;font-size:11px;font-weight:800;color:#45524b}
 .all-icon{font-size:19px;line-height:1}

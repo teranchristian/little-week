@@ -61,6 +61,29 @@ export interface Activity {
   who: PersonId[];
   simultaneousId?: string;
 }
+export const maxActivitiesPerSection = 2;
+export const maxPeoplePerActivity = 4;
+
+// Saved calendars may exceed newer limits; edits can repair them without losing data.
+export function calendarLimitError(before: WeekPlan, after: WeekPlan): string | null {
+  for (let day = 0; day < after.length; day++) for (const part of parts) {
+    const oldItems = before[day][part.id];
+    const items = after[day][part.id];
+    if (items.length > Math.max(maxActivitiesPerSection, oldItems.length))
+      return 'Only 2 activities fit in each part of the day. Choose another section.';
+    for (const item of items) {
+      const oldItem = before.flatMap(dayPlan => parts.flatMap(dayPart => dayPlan[dayPart.id])).find(old => old.id === item.id);
+      if (item.who.length > Math.max(maxPeoplePerActivity, oldItem?.who.length ?? 0))
+        return 'Choose up to 4 people for an activity.';
+      if (!item.simultaneousId) continue;
+      const count = items.filter(other => other.simultaneousId === item.simultaneousId).length;
+      const oldCount = oldItems.filter(other => other.simultaneousId === item.simultaneousId).length;
+      if (count > Math.max(maxActivitiesPerSection, oldCount))
+        return 'Only 2 activities can be side by side.';
+    }
+  }
+  return null;
+}
 export function sortGroupedActivities(activities: Activity[], members: Person[]): Activity[] {
   const rank = (activity: Activity) => {
     if (activity.who.length !== 1) return activity.who.length ? members.length : members.length + 1;

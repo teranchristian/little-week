@@ -7,7 +7,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import {
-  days, defaultFamily, familyIcon, familyStorageKey, findActivity, groupActivity, icons, moveActivity, newActivityId, newPersonId, parts, previousFamilyIcon, readFamily, readWeek,
+  calendarLimitError, maxActivitiesPerSection, maxPeoplePerActivity, days, defaultFamily, familyIcon, familyStorageKey, findActivity, groupActivity, icons, moveActivity, newActivityId, newPersonId, parts, previousFamilyIcon, readFamily, readWeek,
   printActivityWeight, sampleWeekForFamily, sortGroupedActivities, storageKey,
   type Activity, type ActivityDestination, type ActivityPosition, type Family, type PartId, type PersonId, type WeekPlan,
 } from './planner';
@@ -169,7 +169,7 @@ function DayPart({ day, part, activities, onEdit, onDelete, dropPreview, draggin
         })}
       </div>
     </SortableContext>
-    <button type="button" className="add" onClick={() => onEdit({ day, part: part.id, index: null })} title={`Add an activity to ${days[day]} ${part.name}`}>+ Add</button>
+    <button type="button" className="add" disabled={activities.length >= maxActivitiesPerSection} onClick={() => onEdit({ day, part: part.id, index: null })} title={activities.length >= maxActivitiesPerSection ? 'This section already has 2 activities' : `Add an activity to ${days[day]} ${part.name}`}>{activities.length >= maxActivitiesPerSection ? '2 activities · full' : '+ Add'}</button>
   </section>;
 }
 
@@ -647,7 +647,7 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose, onA
   function togglePerson(id: PersonId) {
     setWho(current => current.includes(id)
       ? current.filter(person => person !== id)
-      : members.map(person => person.id).filter(person => current.includes(person) || person === id));
+      : current.length >= maxPeoplePerActivity ? current : members.map(person => person.id).filter(person => current.includes(person) || person === id));
   }
 
   function save() {
@@ -691,8 +691,11 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose, onA
       <label htmlFor="activityName" className="hint">Short label (optional for printing)</label>
       <input id="activityName" className="mini-input" maxLength={25} value={label} onChange={event => setLabel(event.target.value)} />
       <div className="section-title person-section-title person-section-heading">2. Who is doing it?
-        <button className="select-all-link" type="button" aria-label="Select all family members" onClick={() => setWho(members.map(person => person.id))}>all</button>
+        <button className="select-all-link" type="button" aria-label="Select up to four family members" onClick={() => setWho(members.slice(0, maxPeoplePerActivity).map(person => person.id))}>up to 4</button>
       </div>
+      <p className={who.length >= maxPeoplePerActivity ? 'people-limit-warning' : 'hint'} role={who.length >= maxPeoplePerActivity ? 'status' : undefined}>
+        {who.length >= maxPeoplePerActivity ? '4 people selected — that’s the limit. Deselect someone to choose another.' : 'Choose up to 4 people.'}
+      </p>
       <div className="person-grid">{members.map(person => <button key={person.id} type="button" className={`person-choice ${who.includes(person.id) ? 'selected' : ''}`} aria-pressed={who.includes(person.id)} onClick={() => togglePerson(person.id)}>
         <Face id={person.id} />{person.name}
       </button>)}</div>
@@ -710,7 +713,7 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose, onA
         }}>{parts.map(part => <option key={part.id} value={part.id}>{part.name}</option>)}</select></label>
         <label className="hint destination-position">At the same time as<select className="mini-input" value={selectedParallel} onChange={event => setParallelWith(event.target.value)}>
           <option value="">No other activity</option>
-          {parallelOptions.map(group => <option key={group[0].id} value={group[0].id}>{sortGroupedActivities(group, members).map(item => item.label).join(' + ')}</option>)}
+          {parallelOptions.map(group => <option key={group[0].id} value={group[0].id} disabled={group.length >= maxActivitiesPerSection}>{sortGroupedActivities(group, members).map(item => item.label).join(' + ')}</option>)}
         </select></label>
         {!selectedParallel && <label className="hint destination-position">Position<select className="mini-input" aria-label="Position" value={position} onChange={event => setPosition(Number(event.target.value))}>
           <option value={0}>First</option>
@@ -979,6 +982,8 @@ export default function App() {
 
   function commitMove(before: WeekPlan, after: WeekPlan, id: string) {
     if (before === after) return;
+    const error = calendarLimitError(before, after);
+    if (error) { window.alert(error); return; }
     setWeek(after);
     showMove(before, after, id);
   }
@@ -993,6 +998,8 @@ export default function App() {
       if (companion) companion.simultaneousId = activity.simultaneousId;
     }
     destinationItems.splice(destination.index ?? destinationItems.length, 0, activity);
+    const error = calendarLimitError(week, next);
+    if (error) { window.alert(error); return; }
     setWeek(next);
     if (target.index !== null) showMove(week, next, activity.id);
     else setUndoMove(null);
