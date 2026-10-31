@@ -170,13 +170,14 @@ function GroupDropEdge({ day, part, id, edge }: { day: number; part: PartId; id:
   return <div ref={setNodeRef} className={`group-drop-edge ${edge} ${isOver ? 'is-over' : ''}`}><span>Drop here to move {edge === 'before' ? 'above' : 'below'}</span></div>;
 }
 
-function DayPart({ day, part, dayPlan, isScrolling, highlightedId, onHighlight, onEdit, onAddDay, onDelete, dropPreview, dragging }: {
-  day: number; part: typeof parts[number]; dayPlan: WeekPlan[number]; isScrolling: boolean; highlightedId: string | null; onHighlight: (id: string | null) => void; onEdit: (target: EditTarget) => void; onAddDay?: () => void; onDelete: (activity: Activity, section: PartId) => void; dropPreview: DropPreview | null; dragging: Activity | null;
+function DayPart({ day, part, dayPlan, highlightedId, onHighlight, onEdit, onDelete, dropPreview, dragging }: {
+  day: number; part: typeof parts[number]; dayPlan: WeekPlan[number]; highlightedId: string | null; onHighlight: (id: string | null) => void; onEdit: (target: EditTarget) => void; onDelete: (activity: Activity, section: PartId) => void; dropPreview: DropPreview | null; dragging: Activity | null;
 }) {
   const activities = dayPlan[part.id];
   const visibleActivities = occupiedSection(dayPlan, part.id);
   const members = useContext(FamilyContext).members;
   const layout = sectionLayout(visibleActivities);
+  const sectionFull = layout.slots >= maxActivitiesPerSection;
   const overLimit = layout.slots > maxActivitiesPerSection || layout.groupCount > 1 || layout.largestGroup > 2 || visibleActivities.some(item => participantTokens(item.who, members).length > maxPeoplePerActivity);
   const { setNodeRef, isOver } = useDroppable({ id: slotId(day, part.id), data: { type: 'slot', day, part: part.id } });
   return <section ref={setNodeRef} className={`part ${part.id} ${isOver ? 'drop-target' : ''}`} data-over-limit={overLimit ? 'true' : undefined} aria-label={`${days[day]} ${part.name}`}>
@@ -203,12 +204,12 @@ function DayPart({ day, part, dayPlan, isScrolling, highlightedId, onHighlight, 
         })}
       </div>
     </SortableContext>
-    {onAddDay && <button type="button" className={`day-add-desktop ${isScrolling ? 'is-hidden' : ''}`} data-day={day} onClick={onAddDay} aria-label={`Add an activity to ${days[day]}`} title={`Add an activity to ${days[day]}`}>+</button>}
+    <button type="button" className="add" disabled={sectionFull} onClick={() => onEdit({ day, part: part.id, index: null })} title={sectionFull ? 'This section already has 2 activities or groups' : `Add an activity to ${days[day]} ${part.name}`}>{sectionFull ? 'Section full' : '+ Add'}</button>
   </section>;
 }
 
-function Calendar({ week, displayedDays, isScrolling, onEdit, onDelete, onCommit }: {
-  week: WeekPlan; displayedDays: VisibleDay[]; isScrolling: boolean; onEdit: (target: EditTarget) => void; onDelete: (activity: Activity, section: PartId) => void;
+function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
+  week: WeekPlan; displayedDays: VisibleDay[]; onEdit: (target: EditTarget) => void; onDelete: (activity: Activity, section: PartId) => void;
   onCommit: (before: WeekPlan, after: WeekPlan, activityId: string) => void;
 }) {
   const sensors = useSensors(
@@ -245,49 +246,6 @@ function Calendar({ week, displayedDays, isScrolling, onEdit, onDelete, onCommit
       window.removeEventListener('resize', updateActiveDay);
     };
   }, [displayedDays]);
-
-  useEffect(() => {
-    const calendar = document.querySelector<HTMLElement>('.calendar');
-    const scroll = calendar?.closest<HTMLElement>('.scroll');
-    if (!calendar || !scroll) return;
-    const buttons = Array.from(calendar.querySelectorAll<HTMLButtonElement>('.day-add-desktop'));
-    let frame = 0;
-    const positionButtons = () => {
-      frame = 0;
-      const calendarRect = calendar.getBoundingClientRect();
-      const scrollRect = scroll.getBoundingClientRect();
-      const headerBottom = document.querySelector<HTMLElement>('.desktop-day-bar')?.getBoundingClientRect().bottom ?? 0;
-      const visibleVertically = calendarRect.bottom > headerBottom + 43 && calendarRect.top < window.innerHeight;
-      for (const button of buttons) {
-        const day = Number(button.dataset.day);
-        const part = document.getElementById(`day-${day}`)?.querySelector<HTMLElement>('.part.night');
-        if (!part) continue;
-        const column = part.getBoundingClientRect();
-        const left = column.right - 43;
-        const visibleHorizontally = left >= scrollRect.left + 4 && left + 35 <= scrollRect.right - 4;
-        button.style.visibility = visibleVertically && visibleHorizontally ? 'visible' : 'hidden';
-        button.style.left = `${left}px`;
-        button.style.top = `${Math.max(calendarRect.top + 8, Math.min(window.innerHeight - 60, column.bottom - 43))}px`;
-      }
-    };
-    const schedulePosition = () => {
-      if (!frame) frame = window.requestAnimationFrame(positionButtons);
-    };
-    const observer = new ResizeObserver(schedulePosition);
-    observer.observe(calendar);
-    observer.observe(scroll);
-    window.addEventListener('scroll', schedulePosition, { passive: true });
-    window.addEventListener('resize', schedulePosition);
-    scroll.addEventListener('scroll', schedulePosition, { passive: true });
-    schedulePosition();
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('scroll', schedulePosition);
-      window.removeEventListener('resize', schedulePosition);
-      scroll.removeEventListener('scroll', schedulePosition);
-      window.cancelAnimationFrame(frame);
-    };
-  }, [displayedDays, week]);
 
   const collisionDetection: CollisionDetection = args => {
     const pointerHits = pointerWithin(args);
@@ -397,11 +355,6 @@ function Calendar({ week, displayedDays, isScrolling, onEdit, onDelete, onCommit
     if (!suppressDragClick.current) onEdit(target);
   }
 
-  function addToDay(day: number) {
-    const part = parts.find(item => sectionLayout(occupiedSection(week[day], item.id)).slots < maxActivitiesPerSection)?.id ?? 'morning';
-    onEdit({ day, part, index: null });
-  }
-
   useEffect(() => {
     // Keep the printed calendar full width and fit its content into one page.
     function fitPrint() {
@@ -502,13 +455,12 @@ function Calendar({ week, displayedDays, isScrolling, onEdit, onDelete, onCommit
     <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={dragStart} onDragMove={updatePreview} onDragOver={updatePreview} onDragEnd={dragEnd} onDragCancel={clearDrag}>
       {displayedDays.map(({ index: dayIndex, label, date }) => <article className="day" id={`day-${dayIndex}`} key={dayIndex}>
         <div className="day-head"><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>
-        {parts.map(part => <DayPart key={part.id} day={dayIndex} part={part} dayPlan={visibleWeek[dayIndex]} isScrolling={isScrolling} highlightedId={highlightedId} onHighlight={setHighlightedId} dropPreview={dropPreview} dragging={dragging} onEdit={edit} onAddDay={part.id === 'night' ? () => addToDay(dayIndex) : undefined} onDelete={onDelete} />)}
+        {parts.map(part => <DayPart key={part.id} day={dayIndex} part={part} dayPlan={visibleWeek[dayIndex]} highlightedId={highlightedId} onHighlight={setHighlightedId} dropPreview={dropPreview} dragging={dragging} onEdit={edit} onDelete={onDelete} />)}
       </article>)}
       {dragging && dropHint && <div className="drag-hint" role="status">{dropHint}</div>}
       {createPortal(<DragOverlay dropAnimation={null}>{dragging && <div className="activity drag-overlay"><ActivityContent activity={dragging} /></div>}</DragOverlay>, document.body)}
     </DndContext>
   </div></section>
-    <button type="button" className={`day-add-mobile ${isScrolling ? 'is-hidden' : ''}`} onClick={() => addToDay(activeDay)} aria-label={`Add an activity to ${days[activeDay]}`} title={`Add an activity to ${days[activeDay]}`}>+ <span>{days[activeDay]}</span></button>
   </>;
 }
 
@@ -803,32 +755,49 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose, onA
       <div className="person-grid">{members.map(person => <button key={person.id} type="button" className={`person-choice ${who.includes(person.id) ? 'selected' : ''}`} aria-pressed={who.includes(person.id)} onClick={() => togglePerson(person.id)}>
         <Face id={person.id} />{person.name}
       </button>)}</div>
-      <div className="section-title destination-section-title">3. Where does it go?</div>
-      <div className="destination-grid">
-        <label className="hint">Day<select className="mini-input" aria-label="Day" value={destinationDay} onChange={event => {
-          const day = Number(event.target.value);
-          setDestinationDay(day);
-          setPosition(availableActivities(day, destinationPart).length);
-        }}>{days.map((day, index) => <option key={day} value={index}>{day}</option>)}</select></label>
-        <label className="hint">Starts<select className="mini-input" aria-label="Starts" value={destinationPart} onChange={event => {
-          const part = event.target.value as PartId;
-          const wasSinglePart = endPart === destinationPart;
-          setDestinationPart(part);
-          if (wasSinglePart || partIndex(endPart) < partIndex(part)) setEndPart(part);
-          setPosition(availableActivities(destinationDay, part).length);
-        }}>{parts.map(part => <option key={part.id} value={part.id}>{part.name}</option>)}</select></label>
-        <label className="hint">Ends<select className="mini-input" aria-label="Ends" value={endPart} onChange={event => setEndPart(event.target.value as PartId)}>
-          {parts.filter(part => partIndex(part.id) >= partIndex(destinationPart)).map(part => <option key={part.id} value={part.id}>{part.name}</option>)}
-        </select></label>
-        <label className="hint destination-position">At the same time as<select className="mini-input" value={selectedParallel} onChange={event => setParallelWith(event.target.value)}>
-          <option value="">No other activity</option>
-          {parallelOptions.map(group => <option key={group[0].id} value={group[0].id} disabled={group.length >= maxActivitiesPerSection || sectionLayout(destinationActivities).groupCount >= 1}>{sortGroupedActivities(group, members).map(item => item.label).join(' + ')}</option>)}
-        </select></label>
-        {!selectedParallel && <label className="hint destination-position">Position<select className="mini-input" aria-label="Position" value={position} onChange={event => setPosition(Number(event.target.value))}>
-          <option value={0}>First</option>
-          {destinationActivities.map((item, index) => <option key={index} value={index + 1}>After {item.label}</option>)}
-        </select></label>}
-      </div>
+      {(target.index !== null || target.part !== 'night' || destinationActivities.length > 0) && <>
+        <div className="section-title destination-section-title">3. {target.index === null ? 'Placement' : 'Where does it go?'}</div>
+        <div className="destination-grid">
+          {target.index === null ? <>
+            {target.part !== 'night' && <label className="hint destination-position">Show through<select className="mini-input" aria-label="Show through" value={endPart} onChange={event => setEndPart(event.target.value as PartId)}>
+              {parts.filter(part => partIndex(part.id) >= partIndex(destinationPart)).map(part => <option key={part.id} value={part.id}>{part.id === destinationPart ? `${part.name} only` : `Through ${part.name}`}</option>)}
+            </select></label>}
+            {destinationActivities.length > 0 && <label className="hint destination-position">Place it<select className="mini-input" aria-label="Place it" value={selectedParallel ? `parallel:${selectedParallel}` : `position:${position}`} onChange={event => {
+              const [mode, value] = event.target.value.split(':');
+              if (mode === 'parallel') setParallelWith(value);
+              else { setParallelWith(''); setPosition(Number(value)); }
+            }}>
+              <option value="position:0">Before {destinationActivities[0].label}</option>
+              {destinationActivities.map((item, index) => <option key={`position:${item.id}`} value={`position:${index + 1}`}>After {item.label}</option>)}
+              {parallelOptions.map(group => <option key={`parallel:${group[0].id}`} value={`parallel:${group[0].id}`} disabled={group.length >= maxActivitiesPerSection || sectionLayout(destinationActivities).groupCount >= 1}>At the same time as {sortGroupedActivities(group, members).map(item => item.label).join(' + ')}</option>)}
+            </select></label>}
+          </> : <>
+            <label className="hint">Day<select className="mini-input" aria-label="Day" value={destinationDay} onChange={event => {
+              const day = Number(event.target.value);
+              setDestinationDay(day);
+              setPosition(availableActivities(day, destinationPart).length);
+            }}>{days.map((day, index) => <option key={day} value={index}>{day}</option>)}</select></label>
+            <label className="hint">Starts<select className="mini-input" aria-label="Starts" value={destinationPart} onChange={event => {
+              const part = event.target.value as PartId;
+              const wasSinglePart = endPart === destinationPart;
+              setDestinationPart(part);
+              if (wasSinglePart || partIndex(endPart) < partIndex(part)) setEndPart(part);
+              setPosition(availableActivities(destinationDay, part).length);
+            }}>{parts.map(part => <option key={part.id} value={part.id}>{part.name}</option>)}</select></label>
+            <label className="hint">Ends<select className="mini-input" aria-label="Ends" value={endPart} onChange={event => setEndPart(event.target.value as PartId)}>
+              {parts.filter(part => partIndex(part.id) >= partIndex(destinationPart)).map(part => <option key={part.id} value={part.id}>{part.name}</option>)}
+            </select></label>
+            <label className="hint destination-position">At the same time as<select className="mini-input" value={selectedParallel} onChange={event => setParallelWith(event.target.value)}>
+              <option value="">No other activity</option>
+              {parallelOptions.map(group => <option key={group[0].id} value={group[0].id} disabled={group.length >= maxActivitiesPerSection || sectionLayout(destinationActivities).groupCount >= 1}>{sortGroupedActivities(group, members).map(item => item.label).join(' + ')}</option>)}
+            </select></label>
+            {!selectedParallel && <label className="hint destination-position">Position<select className="mini-input" aria-label="Position" value={position} onChange={event => setPosition(Number(event.target.value))}>
+              <option value={0}>First</option>
+              {destinationActivities.map((item, index) => <option key={index} value={index + 1}>After {item.label}</option>)}
+            </select></label>}
+          </>}
+        </div>
+      </>}
       {endPart !== destinationPart && <p className="hint">Each visible section gets a card that counts toward its 2 activity groups. Editing any card updates the task.</p>}
     </div>
     <div className="modal-foot">
@@ -1057,7 +1026,6 @@ export default function App() {
   const [editingFamily, setEditingFamily] = useState(false);
   const [undoMove, setUndoMove] = useState<UndoMove | null>(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
-  const [isScrolling, setIsScrolling] = useState(false);
   const toastToken = useRef(0);
 
   useEffect(() => {
@@ -1117,12 +1085,8 @@ export default function App() {
   }, [undoMove]);
   useEffect(() => {
     let hideTimeout: number | undefined;
-    let stopTimeout: number | undefined;
     const updateBackToTop = () => {
       window.clearTimeout(hideTimeout);
-      window.clearTimeout(stopTimeout);
-      setIsScrolling(true);
-      stopTimeout = window.setTimeout(() => setIsScrolling(false), 180);
       if (window.scrollY <= 160) {
         setShowBackToTop(false);
       } else {
@@ -1134,7 +1098,6 @@ export default function App() {
     return () => {
       window.removeEventListener('scroll', updateBackToTop);
       window.clearTimeout(hideTimeout);
-      window.clearTimeout(stopTimeout);
     };
   }, []);
 
@@ -1314,7 +1277,7 @@ export default function App() {
     <Legend />
     {!canFitPage && <p className="calendar-limit-warning" role="status">Full screen and one-page print are available after you simplify the saved activities. {crowdedSections.length > 0 && `Review ${crowdedSections.join(', ')}: each section holds up to 2 activities or groups, with at most 1 group of 2. `}{oversizedActivities.length > 0 && `These activities show more than 4 pictures: ${oversizedActivities.join('; ')}. Deselect people or complete a group until 4 pictures remain in each. `}Your activities are still saved below.</p>}
     <div className="intro">Tap an activity to edit it. Drag onto the highlighted area to group activities, or above or below to move them apart (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
-    <Calendar week={week} displayedDays={displayedDays} isScrolling={isScrolling} onEdit={setTarget} onDelete={requestDeleteActivity} onCommit={commitMove} />
+    <Calendar week={week} displayedDays={displayedDays} onEdit={setTarget} onDelete={requestDeleteActivity} onCommit={commitMove} />
     <p className="smallnote">Each time-of-day row fits its activities · Example activities only · Changes save on this device · A4 landscape print · Icons by <a href="https://openmoji.org/">OpenMoji</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>)</p>
     {showBackToTop && <button className="back-to-top" type="button" aria-label="Back to top" title="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })}><span aria-hidden="true">↑</span></button>}
     {target && initialActivity && <ActivityEditor target={target} activity={initialActivity} week={week} onSave={saveActivity} onDelete={deleteActivity} onClose={() => setTarget(null)} onAddCustomIcon={addCustomIcon} />}

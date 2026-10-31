@@ -16,8 +16,8 @@ const chrome = [
 if (!chrome) throw new Error('Chrome is required for the calendar layout check. Set CHROME_PATH to its executable.');
 
 const card = '<div class="activity"><button class="activity-open"><span class="activity-emoji">🍽️</span><span class="activity-details"><span class="activity-name">Activity</span><span class="people"><span class="face">🙂</span></span></span></button></div>';
-const part = (name, count, dayAdd = false) => `<div class="part ${name}"><div class="part-head">${name}</div><div class="activities">${card.repeat(count)}</div>${dayAdd ? '<button class="day-add-desktop">+</button>' : ''}</div>`;
-const day = count => `<article class="day"><div class="day-head">Day</div>${part('morning', count)}${part('afternoon', 0)}${part('night', 0, true)}</article>`;
+const part = (name, count) => `<div class="part ${name}"><div class="part-head">${name}</div><div class="activities">${card.repeat(count)}</div><button class="add">+ Add</button></div>`;
+const day = count => `<article class="day"><div class="day-head">Day</div>${part('morning', count)}${part('afternoon', 0)}${part('night', 0)}</article>`;
 const html = `<!doctype html><meta name="viewport" content="width=device-width"><style>${css}</style><main class="shell"><div class="calendar short-view" style="--calendar-columns:4">${[1, 2, 3, 1].map(day).join('')}</div></main><pre id="result"></pre><script>document.getElementById('result').textContent=JSON.stringify([...document.querySelectorAll('.part.morning')].map(part=>{const activities=part.querySelector('.activities');return{part:part.getBoundingClientRect().height,space:activities.getBoundingClientRect().height,gap:parseFloat(getComputedStyle(activities).gap),cards:[...activities.querySelectorAll('.activity')].map(card=>card.getBoundingClientRect().height)}}));</script>`;
 
 const directory = mkdtempSync(join(tmpdir(), 'little-week-layout-'));
