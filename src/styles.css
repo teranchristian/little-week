@@ -1029,3 +1029,16 @@ button:disabled{cursor:default;opacity:.55}
 /* Keep the page still while an editor or settings dialog is open. */
 html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
 dialog[open]{overscroll-behavior:contain}
+
+/* Pastel day headers keep dark labels legible on colour and monochrome prints. */
+.day-head{color:#1c3330}
+.day-head[data-day="0"]{background:#ee9995}
+.day-head[data-day="1"]{background:#f4bd78}
+.day-head[data-day="2"]{background:#f5de80}
+.day-head[data-day="3"]{background:#9dd6b0}
+.day-head[data-day="4"]{background:#8cc9ea}
+.day-head[data-day="5"]{background:#b7aaeb}
+.day-head[data-day="6"]{background:#eda6cd}
+@media print{
+  .calendar .day-head{border:1px solid #65716d}
+}

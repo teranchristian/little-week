@@ -440,7 +440,7 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
     <div className="desktop-day-bar" aria-hidden="true">
       <div ref={desktopDayHeaders} className="desktop-day-bar-inner" style={{ '--calendar-columns': displayedDays.length } as CSSProperties}>
         <div className="day-part-corner" />
-        {displayedDays.map(({ index, label, date }) => <div className="day-head" key={index}><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>)}
+        {displayedDays.map(({ index, label, date }) => <div className="day-head" data-day={index} key={index}><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>)}
       </div>
     </div>
     <section className="scroll" aria-label="Weekly family activities" onScroll={event => {
@@ -454,7 +454,7 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
     {parts.map(part => <div className={`day-part-label ${part.id}`} key={part.id} aria-hidden="true"><span className="day-part-icon">{part.emoji}</span><span>{part.name}</span></div>)}
     <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={dragStart} onDragMove={updatePreview} onDragOver={updatePreview} onDragEnd={dragEnd} onDragCancel={clearDrag}>
       {displayedDays.map(({ index: dayIndex, label, date }) => <article className="day" id={`day-${dayIndex}`} key={dayIndex}>
-        <div className="day-head"><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>
+        <div className="day-head" data-day={dayIndex}><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>
         {parts.map(part => <DayPart key={part.id} day={dayIndex} part={part} dayPlan={visibleWeek[dayIndex]} highlightedId={highlightedId} onHighlight={setHighlightedId} dropPreview={dropPreview} dragging={dragging} onEdit={edit} onDelete={onDelete} />)}
       </article>)}
       {dragging && dropHint && <div className="drag-hint" role="status">{dropHint}</div>}
