@@ -1,6 +1,6 @@
 import { calendarSettingsKey, type CalendarSettings } from './calendarView.ts';
 import { customIconsStorageKey, type CustomIcon } from './customIcons.ts';
-import { familyStorageKey, parts, storageKey, type Family, type WeekPlan } from './planner.ts';
+import { familyStorageKey, partIndex, parts, storageKey, type Family, type WeekPlan } from './planner.ts';
 
 export interface PlannerBackup {
   format: 'little-week-backup';
@@ -34,6 +34,12 @@ export function parseBackup(text: string): PlannerBackup {
   }
   const memberIds = new Set(family.members.map(member => member.id));
   if (memberIds.size !== family.members.length) throw new Error('The backup has duplicate family members.');
+  const groupIcons = family.groupIcons;
+  if (family.members.some(member => member.role !== undefined && !['dad', 'mum', 'child'].includes(member.role as string)) ||
+    (groupIcons !== undefined && (!record(groupIcons) ||
+      !['family', 'kids', 'parents'].every(group => typeof groupIcons[group] === 'string' && !!(groupIcons[group] as string).trim())))) {
+    throw new Error('The backup has invalid family roles or group icons.');
+  }
   if (!record(calendarSettings) || !['monday', 'sunday', 'today'].includes(calendarSettings.start as string) ||
     !Number.isInteger(calendarSettings.daysToShow) || (calendarSettings.daysToShow as number) < 1 ||
     (calendarSettings.daysToShow as number) > 7) {
@@ -50,12 +56,24 @@ export function parseBackup(text: string): PlannerBackup {
   if (family.members.some(member => member.emoji.startsWith('custom:') && !customIcons.some(icon => icon.id === member.emoji && icon.scope === 'family'))) {
     throw new Error('The backup is missing a family icon.');
   }
+  if (groupIcons && Object.values(groupIcons).some(icon => typeof icon === 'string' && icon.startsWith('custom:') &&
+    !customIcons.some(custom => custom.id === icon && custom.scope === 'family'))) {
+    throw new Error('The backup is missing a family group icon.');
+  }
   if (!Array.isArray(week) || week.length !== 7 || !week.every(day => record(day) && parts.every(part => {
     const activities = day[part.id];
     return Array.isArray(activities) && activities.every((activity: unknown) => record(activity) &&
       typeof activity.id === 'string' && !!activity.id && typeof activity.icon === 'string' &&
       typeof activity.label === 'string' && Array.isArray(activity.who) &&
       activity.who.every((id: unknown) => typeof id === 'string' && memberIds.has(id)) &&
+      (activity.endPart === undefined || (parts.some(candidate => candidate.id === activity.endPart) &&
+        partIndex(activity.endPart as typeof part.id) >= partIndex(part.id))) &&
+      (activity.excludedParts === undefined || (Array.isArray(activity.excludedParts) &&
+        new Set(activity.excludedParts).size === activity.excludedParts.length &&
+        activity.excludedParts.every((excluded: unknown) => typeof excluded === 'string' &&
+          parts.some(candidate => candidate.id === excluded) && activity.endPart !== undefined &&
+          partIndex(excluded as typeof part.id) > partIndex(part.id) &&
+          partIndex(excluded as typeof part.id) < partIndex(activity.endPart as typeof part.id)))) &&
       (!activity.icon.startsWith('custom:') || customIcons.some(icon => icon.id === activity.icon && icon.scope === 'activity')));
   }))) {
     throw new Error('The backup has invalid activities or missing activity icons.');

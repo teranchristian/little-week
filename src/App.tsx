@@ -5,14 +5,14 @@ import {
   pointerWithin, rectIntersection, TouchSensor, useDroppable, useSensor, useSensors,
   type CollisionDetection, type DragEndEvent, type DragMoveEvent, type DragOverEvent, type DragStartEvent,
 } from '@dnd-kit/core';
-import { defaultAnimateLayoutChanges, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import {
-  days, defaultFamily, familyIcon, familyStorageKey, findActivity, icons, moveActivity, newActivityId, newPersonId, parts, previousFamilyIcon, readFamily, readWeek,
-  sampleWeekForFamily, storageKey,
-  type Activity, type ActivityDestination, type ActivityPosition, type Family, type PartId, type PersonId, type WeekPlan,
+  activityVisibleParts, calendarLimitError, occupiedSection, partIndex, removeActivityFromSection, maxActivitiesPerSection, maxPeoplePerActivity, sectionLayout, days, defaultFamily, defaultGroupIcons, familyIcon, familyStorageKey, findActivity, groupActivity, icons, memberRole, moveActivity, newActivityId, newPersonId, participantTokens, parts, previousFamilyIcon, readFamily, readWeek,
+  printActivityWeight, sampleWeekForFamily, sortGroupedActivities, storageKey,
+  type Activity, type ActivityDestination, type ActivityPosition, type Family, type FamilyGroup, type PartId, type PersonId, type WeekPlan,
 } from './planner';
 import { findOpenMoji, openMojiUrl, searchOpenMoji, type OpenMojiIcon } from './openmoji';
+import { CSS } from '@dnd-kit/utilities';
 import { fitImageScale, imageFromFile, isCustomIcon, readCustomIcons, saveCustomIcons, validateIconFile, type CustomIcon, type IconScope } from './customIcons';
 import { calendarSettingsKey, readCalendarSettings, visibleDays, type CalendarSettings, type VisibleDay, type WeekStart } from './calendarView';
 import { createBackup, parseBackup, saveBackup, type PlannerBackup } from './backup';
@@ -35,9 +35,33 @@ function Face({ id }: { id: PersonId }) {
 }
 
 function Participants({ who }: { who: PersonId[] }) {
+  const family = useContext(FamilyContext);
+  const tokens = participantTokens(who, family.members);
   return <span className="people">
-    {who.map(id => <Face key={id} id={id} />)}
+    {tokens.map(token => token.kind === 'person' ? <Face key={token.id} id={token.id} /> : <GroupFace key={token.group} group={token.group} />)}
   </span>;
+}
+
+function GroupPicture({ group, className, iconOverride }: { group: FamilyGroup; className: string; iconOverride?: string }) {
+  const family = useContext(FamilyContext);
+  const customIcons = useContext(CustomIconsContext);
+  const icon = iconOverride ?? family.groupIcons?.[group] ?? 'auto';
+  if (icon !== 'auto') {
+    const custom = customIcons.find(item => item.id === icon && item.scope === 'family');
+    const url = openMojiUrl(icon);
+    return <span className={className} aria-hidden="true">{custom ? <img src={custom.image} alt="" /> : url ? <img src={url} alt="" /> : icon}</span>;
+  }
+  const members = family.members.filter(member => group === 'family' || (group === 'kids' ? memberRole(member) === 'child' : memberRole(member) !== 'child'));
+  if (!members.length) return <span className={className} aria-hidden="true">{group === 'kids' ? '🧒' : '🧑'}</span>;
+  const columns = Math.ceil(Math.sqrt(members.length));
+  return <span className={`${className} family-picture`} aria-hidden="true" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${Math.ceil(members.length / columns)}, minmax(0, 1fr))` }}>
+    {members.map(person => <span key={person.id} className="family-picture-face" style={{ fontSize: `${Math.min(.42, .8 / columns)}em` }}><MemberEmoji emoji={person.emoji} /></span>)}
+  </span>;
+}
+
+function GroupFace({ group }: { group: FamilyGroup }) {
+  const name = { family: 'Family', kids: 'Kids', parents: 'Parents' }[group];
+  return <span className="face group-face" title={name} aria-label={name}><GroupPicture group={group} className="group-face-picture" /></span>;
 }
 
 function Legend() {
@@ -57,35 +81,76 @@ function ActivityContent({ activity }: { activity: Activity }) {
 }
 
 function IconPicture({ emoji, className }: { emoji: string; className: string }) {
-  const members = useContext(FamilyContext).members;
   const customIcons = useContext(CustomIconsContext);
   if (isCustomIcon(emoji)) {
     const custom = customIcons.find(item => item.id === emoji);
     return <span className={className} aria-hidden="true">{custom ? <img src={custom.image} alt="" /> : '🖼️'}</span>;
   }
-  const isFamily = emoji === familyIcon || emoji === previousFamilyIcon;
-  const columns = Math.ceil(Math.sqrt(members.length));
-  if (isFamily) return <span className={`${className} family-picture`} aria-hidden="true" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${Math.ceil(members.length / columns)}, minmax(0, 1fr))` }}>
-    {members.map(person => <span key={person.id} className="family-picture-face" style={{ fontSize: `${Math.min(.42, .8 / columns)}em` }}><MemberEmoji emoji={person.emoji} /></span>)}
-  </span>;
+  if (emoji === familyIcon || emoji === previousFamilyIcon) return <GroupPicture group="family" className={className} />;
   const url = openMojiUrl(emoji);
   return <span className={className} aria-hidden="true">{url ? <img src={url} alt="" /> : emoji}</span>;
 }
 
-function ActivityCard({ day, part, index, activity, onEdit, onDelete }: {
-  day: number; part: PartId; index: number; activity: Activity; onEdit: () => void; onDelete: () => void;
+type DropPreview = { id: string; mode: 'before' | 'after' | 'group' };
+
+function ActivityCard({ day, part, index, activity, highlighted, onHighlight, onEdit, onDelete, dropPreview, dragging }: {
+  day: number; part: PartId; index: number; activity: Activity; highlighted: boolean; onHighlight: (id: string | null) => void; onEdit: () => void; onDelete: () => void; dropPreview: DropPreview | null; dragging: Activity | null;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, isDragging, transform, transition } = useSortable({
     id: activity.id,
     data: { type: 'activity', day, part, index },
-    animateLayoutChanges: args => args.isSorting || args.wasDragging ? defaultAnimateLayoutChanges(args) : true,
   });
-  return <div ref={setNodeRef} className={`activity ${isDragging ? 'is-dragging' : ''}`}
-    style={{ transform: CSS.Transform.toString(transform), transition }}>
-    <button type="button" className="activity-open" onClick={onEdit}
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+    const button = card.querySelector<HTMLElement>('.activity-open');
+    const icon = card.querySelector<HTMLElement>('.activity-emoji');
+    const name = card.querySelector<HTMLElement>('.activity-name');
+    const people = card.querySelector<HTMLElement>('.people');
+    if (!button || !icon || !people) return;
+    const update = () => {
+      const faces = people.querySelectorAll<HTMLElement>('.face');
+      const grouped = !!card.closest('.simultaneous-cards');
+      const vertical = getComputedStyle(people).flexDirection === 'column';
+      const aligned = getComputedStyle(button).flexDirection === 'column' && (grouped ? vertical : true);
+      if (!faces.length || !aligned) {
+        card.classList.remove('stack-top');
+        return;
+      }
+      const faceHeight = faces[0].offsetHeight;
+      const faceGap = parseFloat(getComputedStyle(people).rowGap) || 0;
+      const remainingFaces = grouped
+        ? (faces.length - 1) * (faceHeight + faceGap)
+        : Math.max(0, ...Array.from(faces, face => face.offsetTop - faces[0].offsetTop));
+      if (!grouped) {
+        card.style.setProperty('--stack-first-face', `${faceHeight}px`);
+        card.style.setProperty('--stack-extra-faces', `${remainingFaces}px`);
+      }
+      const buttonGap = parseFloat(getComputedStyle(button).rowGap) || 0;
+      const details = card.querySelector<HTMLElement>('.activity-details');
+      const detailsGap = name?.offsetHeight ? (parseFloat(getComputedStyle(details!).rowGap) || 0) : 0;
+      // The centred layout has a spacer on each side of the icon and details.
+      const baseline = icon.offsetHeight + (name?.offsetHeight || 0) + faceHeight + 3 * buttonGap + detailsGap;
+      card.classList.toggle('stack-top', remainingFaces > (button.clientHeight - baseline) / 2);
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(button);
+    observer.observe(people);
+    update();
+    window.addEventListener('beforeprint', update);
+    window.addEventListener('afterprint', update);
+    return () => { observer.disconnect(); window.removeEventListener('beforeprint', update); window.removeEventListener('afterprint', update); };
+  }, [activity.who, activity.icon, activity.label]);
+  const peopleCount = participantTokens(activity.who, useContext(FamilyContext).members).length;
+  const faceColumns = Math.min(2, Math.max(1, peopleCount));
+  return <div ref={node => { cardRef.current = node; setNodeRef(node); }} className={`activity ${highlighted ? 'linked-hover' : ''} ${isDragging ? 'is-dragging' : ''} ${dropPreview?.id === activity.id ? `drop-${dropPreview.mode}` : ''}`} onMouseEnter={() => onHighlight(activity.id)} onMouseLeave={() => onHighlight(null)} onFocusCapture={() => onHighlight(activity.id)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onHighlight(null); }} style={{ '--people-count': Math.max(1, peopleCount), '--face-columns': faceColumns, '--face-rows': Math.ceil(peopleCount / faceColumns) } as CSSProperties}>
+    <button type="button" className="activity-open" style={{ transform: dropPreview && dropPreview.mode !== 'group' ? CSS.Transform.toString(transform) : undefined, transition }} onClick={onEdit}
       title={`Edit or move ${activity.label}`} {...attributes} {...listeners}>
       <ActivityContent activity={activity} />
     </button>
+    {dragging && dragging.id !== activity.id && <GroupDropTarget id={activity.id} />}
+    {dropPreview?.id === activity.id && dropPreview.mode !== 'group' && <span className={`drop-indicator ${dropPreview.mode}`} aria-hidden="true" />}
     <button type="button" className="activity-delete" onClick={onDelete}
       aria-label={`Delete ${activity.label || 'activity'}`} title={`Delete ${activity.label || 'activity'}`}>
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -95,23 +160,56 @@ function ActivityCard({ day, part, index, activity, onEdit, onDelete }: {
   </div>;
 }
 
-function DayPart({ day, part, activities, onEdit, onDelete }: {
-  day: number; part: typeof parts[number]; activities: Activity[]; onEdit: (target: EditTarget) => void; onDelete: (activity: Activity) => void;
+function GroupDropTarget({ id }: { id: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `group-target:${id}`, data: { type: 'group-target', activityId: id } });
+  return <div ref={setNodeRef} className={`group-drop-target ${isOver ? 'is-over' : ''}`} aria-label="Group activities" />;
+}
+
+function GroupDropEdge({ day, part, id, edge }: { day: number; part: PartId; id: string; edge: 'before' | 'after' }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `group-edge:${day}:${part}:${id}:${edge}`, data: { type: 'group-edge', day, part, groupActivityId: id, edge } });
+  return <div ref={setNodeRef} className={`group-drop-edge ${edge} ${isOver ? 'is-over' : ''}`}><span>Drop here to move {edge === 'before' ? 'above' : 'below'}</span></div>;
+}
+
+function DayPart({ day, part, dayPlan, highlightedId, onHighlight, onEdit, onDelete, dropPreview, dragging }: {
+  day: number; part: typeof parts[number]; dayPlan: WeekPlan[number]; highlightedId: string | null; onHighlight: (id: string | null) => void; onEdit: (target: EditTarget) => void; onDelete: (activity: Activity, section: PartId) => void; dropPreview: DropPreview | null; dragging: Activity | null;
 }) {
+  const activities = dayPlan[part.id];
+  const visibleActivities = occupiedSection(dayPlan, part.id);
+  const members = useContext(FamilyContext).members;
+  const layout = sectionLayout(visibleActivities);
+  const sectionFull = layout.slots >= maxActivitiesPerSection;
+  const overLimit = layout.slots > maxActivitiesPerSection || layout.groupCount > 1 || layout.largestGroup > 2 || visibleActivities.some(item => participantTokens(item.who, members).length > maxPeoplePerActivity);
   const { setNodeRef, isOver } = useDroppable({ id: slotId(day, part.id), data: { type: 'slot', day, part: part.id } });
-  return <section ref={setNodeRef} className={`part ${part.id} ${isOver ? 'drop-target' : ''}`} aria-label={`${days[day]} ${part.name}`}>
+  return <section ref={setNodeRef} className={`part ${part.id} ${isOver ? 'drop-target' : ''}`} data-over-limit={overLimit ? 'true' : undefined} aria-label={`${days[day]} ${part.name}`}>
     <div className="part-head"><span className="symbol" aria-hidden="true">{part.emoji}</span>{part.name}</div>
     <SortableContext items={activities.map(activity => activity.id)} strategy={verticalListSortingStrategy}>
-      <div className="activities" data-count={activities.length}>
-        {activities.map((activity, index) => <ActivityCard key={activity.id} day={day} part={part.id} index={index} activity={activity} onEdit={() => onEdit({ day, part: part.id, index })} onDelete={() => onDelete(activity)} />)}
+      <div className="activities" data-count={visibleActivities.length}>
+        {visibleActivities.map((activity) => {
+          const group = activity.simultaneousId ? visibleActivities.filter(item => item.simultaneousId === activity.simultaneousId) : [];
+          if (group.length > 1 && group[0].id !== activity.id) return null;
+          const card = (item: Activity) => {
+            const itemIndex = activities.indexOf(item);
+            if (itemIndex >= 0) return <ActivityCard key={item.id} day={day} part={part.id} index={itemIndex} activity={item} highlighted={highlightedId === item.id} onHighlight={onHighlight} dropPreview={dropPreview} dragging={dragging} onEdit={() => onEdit({ day, part: part.id, index: itemIndex })} onDelete={() => onDelete(item, part.id)} />;
+            const sourcePart = parts.find(start => dayPlan[start.id].some(candidate => candidate.id === item.id))!.id;
+            const sourceIndex = dayPlan[sourcePart].findIndex(source => source.id === item.id);
+            return <div className={`activity continuation-copy ${highlightedId === item.id ? 'linked-hover' : ''}`} data-continuation-of={item.id} key={`continuation-${item.id}`} onMouseEnter={() => onHighlight(item.id)} onMouseLeave={() => onHighlight(null)} onFocusCapture={() => onHighlight(item.id)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onHighlight(null); }}>
+              <button type="button" className="activity-open" onClick={() => onEdit({ day, part: sourcePart, index: sourceIndex })} title={`Edit ${item.label}`}><ActivityContent activity={item} /></button>
+              <button type="button" className="activity-delete" onClick={() => onDelete(item, part.id)} aria-label={`Delete ${item.label || 'activity'}`} title={`Delete ${item.label || 'activity'}`}>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m5 4v6m4-6v6" /></svg>
+              </button>
+            </div>;
+          };
+          const groupEdgeId = group.find(item => activities.some(actual => actual.id === item.id))?.id;
+          return group.length > 1 ? <div className={`simultaneous-group ${dragging ? 'group-dragging' : ''}`} key={activity.id}>{dragging && groupEdgeId && <GroupDropEdge day={day} part={part.id} id={groupEdgeId} edge="before" />}<div className="simultaneous-cards">{sortGroupedActivities(group, members).map(card)}</div>{dragging && groupEdgeId && <GroupDropEdge day={day} part={part.id} id={groupEdgeId} edge="after" />}</div> : card(activity);
+        })}
       </div>
     </SortableContext>
-    <button type="button" className="add" onClick={() => onEdit({ day, part: part.id, index: null })} title={`Add an activity to ${days[day]} ${part.name}`}>+ Add</button>
+    <button type="button" className="add" disabled={sectionFull} onClick={() => onEdit({ day, part: part.id, index: null })} title={sectionFull ? 'This section already has 2 activities or groups' : `Add an activity to ${days[day]} ${part.name}`}>{sectionFull ? 'Section full' : '+ Add'}</button>
   </section>;
 }
 
 function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
-  week: WeekPlan; displayedDays: VisibleDay[]; onEdit: (target: EditTarget) => void; onDelete: (activity: Activity) => void;
+  week: WeekPlan; displayedDays: VisibleDay[]; onEdit: (target: EditTarget) => void; onDelete: (activity: Activity, section: PartId) => void;
   onCommit: (before: WeekPlan, after: WeekPlan, activityId: string) => void;
 }) {
   const sensors = useSensors(
@@ -120,14 +218,14 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const [dragging, setDragging] = useState<Activity | null>(null);
+  const [dropHint, setDropHint] = useState('');
+  const [dropPreview, setDropPreview] = useState<DropPreview | null>(null);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [activeDay, setActiveDay] = useState(displayedDays[0].index);
   const dayNav = useRef<HTMLElement>(null);
   const desktopDayHeaders = useRef<HTMLDivElement>(null);
-  const [preview, setPreview] = useState<WeekPlan | null>(null);
   const originalWeek = useRef<WeekPlan | null>(null);
   const activeId = useRef<string | null>(null);
-  const previewWeek = useRef<WeekPlan | null>(null);
-  const previewKey = useRef<string | null>(null);
   const suppressDragClick = useRef(false);
 
   useEffect(() => {
@@ -151,7 +249,11 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
 
   const collisionDetection: CollisionDetection = args => {
     const pointerHits = pointerWithin(args);
-    const cardHits = pointerHits.filter(hit => args.droppableContainers.find(container => container.id === hit.id)?.data.current?.type === 'activity');
+    const groupHits = pointerHits.filter(hit => args.droppableContainers.find(container => container.id === hit.id)?.data.current?.type === 'group-target');
+    if (groupHits.length) return groupHits;
+    const edgeHits = pointerHits.filter(hit => args.droppableContainers.find(container => container.id === hit.id)?.data.current?.type === 'group-edge');
+    if (edgeHits.length) return edgeHits;
+    const cardHits = pointerHits.filter(hit => hit.id !== args.active.id && args.droppableContainers.find(container => container.id === hit.id)?.data.current?.type === 'activity');
     return cardHits.length ? cardHits : pointerHits.length ? pointerHits : (args.pointerCoordinates ? rectIntersection(args) : closestCenter(args));
   };
 
@@ -168,11 +270,18 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
     suppressDragClick.current = true;
     window.setTimeout(() => { suppressDragClick.current = false; }, 0);
     setDragging(null);
-    setPreview(null);
-    previewWeek.current = null;
-    previewKey.current = null;
+    setDropHint('');
+    setDropPreview(null);
     originalWeek.current = null;
     activeId.current = null;
+  }
+
+  function pointerY(event: DragMoveEvent | DragOverEvent | DragEndEvent): number | undefined {
+    const origin = event.activatorEvent;
+    if ('clientY' in origin && typeof origin.clientY === 'number') return origin.clientY + event.delta.y;
+    if ('touches' in origin && origin.touches instanceof TouchList && origin.touches.length) return origin.touches[0].clientY + event.delta.y;
+    const rect = event.active.rect.current.translated;
+    return rect ? rect.top + rect.height / 2 : undefined;
   }
 
   function destinationFor(event: DragMoveEvent | DragOverEvent | DragEndEvent): ActivityDestination | undefined {
@@ -185,41 +294,48 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
     const target = over.data.current as (
       | (ActivityPosition & { type: 'activity' })
       | ({ day: number; part: PartId; type: 'slot' })
+      | ({ day: number; part: PartId; type: 'group-edge'; groupActivityId: string; edge: 'before' | 'after' })
     ) | undefined;
     if (!target) return;
     if (target.type === 'slot') return { day: target.day, part: target.part, index: null };
+    if (target.type === 'group-edge') {
+      const items = original[target.day][target.part];
+      const group = items.find(item => item.id === target.groupActivityId)?.simultaneousId;
+      const indexes = items.map((item, index) => group && item.simultaneousId === group ? index : -1).filter(index => index >= 0);
+      if (!indexes.length) return;
+      let index = target.edge === 'before' ? Math.min(...indexes) : Math.max(...indexes) + 1;
+      if (source.day === target.day && source.part === target.part && source.index < index) index--;
+      return { day: target.day, part: target.part, index };
+    }
     const targetPosition = findActivity(original, String(over.id));
     if (!targetPosition) return;
-    const draggedCenter = event.active.rect.current.translated
-      ? event.active.rect.current.translated.top + event.active.rect.current.translated.height / 2
-      : over.rect.top;
-    const after = draggedCenter > over.rect.top + over.rect.height / 2;
-    let index = targetPosition.index + Number(after);
+    const after = (pointerY(event) ?? over.rect.top) > over.rect.top + over.rect.height / 2;
+    const targetActivity = original[targetPosition.day][targetPosition.part][targetPosition.index];
+    const items = original[targetPosition.day][targetPosition.part];
+    const groupIndexes = targetActivity.simultaneousId ? items.map((item, index) => item.simultaneousId === targetActivity.simultaneousId ? index : -1).filter(index => index >= 0) : [targetPosition.index];
+    let index = after ? Math.max(...groupIndexes) + 1 : Math.min(...groupIndexes);
     if (source.day === targetPosition.day && source.part === targetPosition.part && source.index < index) index--;
     return { day: targetPosition.day, part: targetPosition.part, index };
+  }
+
+  function groupTarget(event: DragMoveEvent | DragOverEvent | DragEndEvent): string | undefined {
+    const target = event.over?.data.current;
+    return target?.type === 'group-target' && target.activityId !== activeId.current ? target.activityId as string : undefined;
   }
 
   function updatePreview(event: DragMoveEvent | DragOverEvent) {
     const original = originalWeek.current;
     const id = activeId.current;
     const destination = destinationFor(event);
-    if (!original || !id || !destination) return;
-    const source = findActivity(original, id);
-    if (!source) return;
-    if (source.day === destination.day && source.part === destination.part) {
-      if (previewWeek.current) {
-        previewWeek.current = null;
-        previewKey.current = null;
-        setPreview(null);
-      }
-      return;
-    }
-    const key = `${destination.day}:${destination.part}:${destination.index ?? 'end'}`;
-    if (previewKey.current === key) return;
-    const next = moveActivity(original, source, destination);
-    previewWeek.current = next;
-    previewKey.current = key;
-    setPreview(next);
+    const group = groupTarget(event);
+    setDropHint(group ? 'Drop to do these at the same time' : destination ? 'Drop to move the activity here' : '');
+    if (group) { setDropPreview({ id: group, mode: 'group' }); return; }
+    if (!original || !id || !destination || !event.over) { setDropPreview(null); return; }
+    if (event.over.data.current?.type === 'activity') {
+      const mode = group ? 'group' : (pointerY(event) ?? event.over.rect.top) < event.over.rect.top + event.over.rect.height / 2 ? 'before' : 'after';
+      setDropPreview({ id: String(event.over.id), mode });
+    } else setDropPreview(null);
+
   }
 
   function dragEnd(event: DragEndEvent) {
@@ -228,8 +344,9 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
     const source = original && id ? findActivity(original, id) : undefined;
     const destination = destinationFor(event);
     if (original && source && id && event.over) {
-      if (destination) onCommit(original, moveActivity(original, source, destination), id);
-      else if (String(event.over.id) === id && previewWeek.current) onCommit(original, previewWeek.current, id);
+      const group = groupTarget(event);
+      if (group) onCommit(original, groupActivity(original, id, group), id);
+      else if (destination) onCommit(original, moveActivity(original, source, destination), id);
     }
     clearDrag();
   }
@@ -283,19 +400,47 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
     };
   }, []);
 
-  const visibleWeek = preview ?? week;
-  const printRowWeights = parts.map(part => Math.max(0, ...displayedDays.map(({ index }) => visibleWeek[index][part.id].length)) + 0.4);
+  useEffect(() => {
+    const calendar = document.querySelector<HTMLElement>('.fullscreen-calendar .calendar');
+    const scroll = calendar?.closest<HTMLElement>('.scroll');
+    if (!calendar || !scroll) return;
+    const fit = () => {
+      calendar.style.removeProperty('--fullscreen-scale');
+      if (calendar.getBoundingClientRect().height <= scroll.clientHeight) return;
+      let lower = 0.01;
+      let upper = 1;
+      for (let i = 0; i < 14; i++) {
+        const scale = (lower + upper) / 2;
+        calendar.style.setProperty('--fullscreen-scale', String(scale));
+        if (calendar.getBoundingClientRect().height <= scroll.clientHeight) lower = scale;
+        else upper = scale;
+      }
+      calendar.style.setProperty('--fullscreen-scale', String(lower));
+    };
+    const observer = new ResizeObserver(fit);
+    observer.observe(scroll);
+    fit();
+    return () => {
+      observer.disconnect();
+      calendar.style.removeProperty('--fullscreen-scale');
+    };
+  });
+
+  const visibleWeek = week;
+  const members = useContext(FamilyContext).members;
+  const printRowWeights = parts.map(part => Math.max(0, ...displayedDays.map(({ index }) => printActivityWeight(occupiedSection(visibleWeek[index], part.id), members))) + 0.4);
   const printRowTotal = printRowWeights.reduce((total, weight) => total + weight, 0);
   const printRowHeights = Object.fromEntries(parts.map((part, index) =>
     [`--print-${part.id}-height`, `${(183 * printRowWeights[index] / printRowTotal).toFixed(2)}mm`]
   ));
-  const fullscreenRowWeights = Object.fromEntries(parts.map((part, index) =>
-    [`--fullscreen-${part.id}-weight`, `${printRowWeights[index]}fr`]
+  const fullscreenRowWeights = Object.fromEntries(parts.map(part =>
+    [`--fullscreen-${part.id}-weight`, `${Math.max(0, ...displayedDays.map(({ index: day }) => sectionLayout(occupiedSection(visibleWeek[day], part.id)).slots)) + 0.4}fr`]
   ));
   return <>
     <div className="desktop-day-bar" aria-hidden="true">
       <div ref={desktopDayHeaders} className="desktop-day-bar-inner" style={{ '--calendar-columns': displayedDays.length } as CSSProperties}>
-        {displayedDays.map(({ index, label, date }) => <div className="day-head" key={index}><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>)}
+        <div className="day-part-corner" />
+        {displayedDays.map(({ index, label, date }) => <div className="day-head" data-day={index} key={index}><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>)}
       </div>
     </div>
     <section className="scroll" aria-label="Weekly family activities" onScroll={event => {
@@ -304,15 +449,19 @@ function Calendar({ week, displayedDays, onEdit, onDelete, onCommit }: {
     <nav ref={dayNav} className="day-nav" aria-label="Jump to day">
       {displayedDays.map(({ index, label, date }) => <button key={index} type="button" className={activeDay === index ? 'active' : ''} aria-current={activeDay === index ? 'location' : undefined} onClick={() => document.getElementById(`day-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{label}{date && <span className="nav-date">{date.getDate()}</span>}</button>)}
     </nav>
-    <div className={`calendar ${displayedDays.length < 7 ? 'short-view' : ''}`} style={{ '--calendar-columns': displayedDays.length, ...printRowHeights, ...fullscreenRowWeights } as CSSProperties}>
+    <div className={`calendar ${displayedDays.length < 7 ? 'short-view' : ''} ${displayedDays.length > 3 ? 'many-days' : ''}`} style={{ '--calendar-columns': displayedDays.length, ...printRowHeights, ...fullscreenRowWeights } as CSSProperties}>
+    <div className="calendar-corner" aria-hidden="true" />
+    {parts.map(part => <div className={`day-part-label ${part.id}`} key={part.id} aria-hidden="true"><span className="day-part-icon">{part.emoji}</span><span>{part.name}</span></div>)}
     <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={dragStart} onDragMove={updatePreview} onDragOver={updatePreview} onDragEnd={dragEnd} onDragCancel={clearDrag}>
       {displayedDays.map(({ index: dayIndex, label, date }) => <article className="day" id={`day-${dayIndex}`} key={dayIndex}>
-        <div className="day-head"><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>
-        {parts.map(part => <DayPart key={part.id} day={dayIndex} part={part} activities={visibleWeek[dayIndex][part.id]} onEdit={edit} onDelete={onDelete} />)}
+        <div className="day-head" data-day={dayIndex}><span>{label}</span>{date && <span className="day-date">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}</div>
+        {parts.map(part => <DayPart key={part.id} day={dayIndex} part={part} dayPlan={visibleWeek[dayIndex]} highlightedId={highlightedId} onHighlight={setHighlightedId} dropPreview={dropPreview} dragging={dragging} onEdit={edit} onDelete={onDelete} />)}
       </article>)}
+      {dragging && dropHint && <div className="drag-hint" role="status">{dropHint}</div>}
       {createPortal(<DragOverlay dropAnimation={null}>{dragging && <div className="activity drag-overlay"><ActivityContent activity={dragging} /></div>}</DragOverlay>, document.body)}
     </DndContext>
-  </div></section></>;
+  </div></section>
+  </>;
 }
 
 function CustomIconDialog({ scope, existing, onSave, onClose }: {
@@ -492,10 +641,19 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose, onA
   const [who, setWho] = useState<PersonId[]>(activity.who);
   const [destinationDay, setDestinationDay] = useState(target.day);
   const [destinationPart, setDestinationPart] = useState<PartId>(target.part);
+  const [endPart, setEndPart] = useState<PartId>(activity.endPart && partIndex(activity.endPart) >= partIndex(target.part) ? activity.endPart : target.part);
+  const [parallelWith, setParallelWith] = useState(() => activity.simultaneousId ? week[target.day][target.part].find(item => item.id !== activity.id && item.simultaneousId === activity.simultaneousId)?.id ?? '' : '');
   const [position, setPosition] = useState(target.index ?? week[target.day][target.part].length);
   const availableActivities = (day: number, part: PartId) => week[day][part].filter((_, index) =>
     !(target.index !== null && target.day === day && target.part === part && target.index === index));
   const destinationActivities = availableActivities(destinationDay, destinationPart);
+  const parallelOptions = destinationActivities.reduce<Activity[][]>((groups, item) => {
+    const group = item.simultaneousId && groups.find(items => items[0].simultaneousId === item.simultaneousId);
+    if (group) group.push(item);
+    else groups.push([item]);
+    return groups;
+  }, []);
+  const selectedParallel = parallelOptions.find(group => group.some(item => item.id === parallelWith))?.[0].id ?? '';
   const usedIcons = new Map<string, number>();
   for (const day of week) for (const part of parts) for (const item of day[part.id]) {
     usedIcons.set(item.icon, (usedIcons.get(item.icon) ?? 0) + 1);
@@ -529,15 +687,32 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose, onA
   }
 
   function togglePerson(id: PersonId) {
-    setWho(current => current.includes(id)
-      ? current.filter(person => person !== id)
-      : members.map(person => person.id).filter(person => current.includes(person) || person === id));
+    setWho(current => {
+      const next = current.includes(id) ? current.filter(person => person !== id) : members.map(person => person.id).filter(person => current.includes(person) || person === id);
+      return participantTokens(next, members).length <= maxPeoplePerActivity ? next : current;
+    });
+  }
+
+  function toggleGroup(group: FamilyGroup) {
+    const ids = members.filter(member => group === 'family' || (group === 'kids' ? memberRole(member) === 'child' : memberRole(member) !== 'child')).map(member => member.id);
+    if (!ids.length) return;
+    setWho(current => {
+      const selected = ids.every(id => current.includes(id));
+      const next = selected ? current.filter(id => !ids.includes(id)) : members.map(member => member.id).filter(id => current.includes(id) || ids.includes(id));
+      return participantTokens(next, members).length <= maxPeoplePerActivity ? next : current;
+    });
   }
 
   function save() {
+    const companion = destinationActivities.find(item => item.id === parallelWith);
+    const groupId = companion?.simultaneousId || companion?.id;
+    const insertionIndex = companion
+      ? destinationActivities.reduce((last, item, index) => item.id === companion.id || (groupId && item.simultaneousId === groupId) ? index + 1 : last, 0)
+      : Math.min(position, destinationActivities.length);
+    const keepExcludedParts = destinationDay === target.day && destinationPart === target.part && endPart === (activity.endPart ?? target.part);
     onSave(
-      { id: activity.id, icon, label: label.trim() || icons.find(([value]) => value === icon)?.[1] || findOpenMoji(icon)?.name || customIcons.find(item => item.id === icon)?.name || 'Activity', who },
-      { day: destinationDay, part: destinationPart, index: Math.min(position, destinationActivities.length) },
+      { id: activity.id, icon, simultaneousId: companion ? (companion.simultaneousId || companion.id) : undefined, endPart: endPart !== destinationPart ? endPart : undefined, excludedParts: keepExcludedParts ? activity.excludedParts : undefined, label: label.trim() || icons.find(([value]) => value === icon)?.[1] || findOpenMoji(icon)?.name || customIcons.find(item => item.id === icon)?.name || 'Activity', who },
+      { day: destinationDay, part: destinationPart, index: insertionIndex },
     );
   }
 
@@ -569,29 +744,61 @@ function ActivityEditor({ target, activity, week, onSave, onDelete, onClose, onA
       {visibleIcons.length === 0 && visibleCustomIcons.length === 0 && <div className="icon-empty">No icons found. Try another word.</div>}
       <label htmlFor="activityName" className="hint">Short label (optional for printing)</label>
       <input id="activityName" className="mini-input" maxLength={25} value={label} onChange={event => setLabel(event.target.value)} />
-      <div className="section-title person-section-title person-section-heading">2. Who is doing it?
-        <button className="select-all-link" type="button" aria-label="Select all family members" onClick={() => setWho(members.map(person => person.id))}>all</button>
-      </div>
+      <div className="section-title person-section-title person-section-heading">2. Who is doing it?</div>
+      <p className={participantTokens(who, members).length >= maxPeoplePerActivity ? 'people-limit-warning' : 'hint'} role={participantTokens(who, members).length >= maxPeoplePerActivity ? 'status' : undefined}>
+        Choose up to 4 pictures. A complete family, kids, or parents group counts as one.
+      </p>
+      <div className="activity-group-choices">{(['family', 'kids', 'parents'] as const).map(group => {
+        const ids = members.filter(member => group === 'family' || (group === 'kids' ? memberRole(member) === 'child' : memberRole(member) !== 'child')).map(member => member.id);
+        return <button key={group} type="button" className={`btn ${ids.length && ids.every(id => who.includes(id)) ? 'selected' : ''}`} aria-pressed={!!ids.length && ids.every(id => who.includes(id))} disabled={!ids.length} onClick={() => toggleGroup(group)}><GroupFace group={group} />{group === 'kids' ? 'Kids' : group === 'parents' ? 'Parents' : 'Family'}</button>;
+      })}</div>
       <div className="person-grid">{members.map(person => <button key={person.id} type="button" className={`person-choice ${who.includes(person.id) ? 'selected' : ''}`} aria-pressed={who.includes(person.id)} onClick={() => togglePerson(person.id)}>
         <Face id={person.id} />{person.name}
       </button>)}</div>
-      <div className="section-title destination-section-title">3. Where does it go?</div>
-      <div className="destination-grid">
-        <label className="hint">Day<select className="mini-input" aria-label="Day" value={destinationDay} onChange={event => {
-          const day = Number(event.target.value);
-          setDestinationDay(day);
-          setPosition(availableActivities(day, destinationPart).length);
-        }}>{days.map((day, index) => <option key={day} value={index}>{day}</option>)}</select></label>
-        <label className="hint">Time of day<select className="mini-input" aria-label="Time of day" value={destinationPart} onChange={event => {
-          const part = event.target.value as PartId;
-          setDestinationPart(part);
-          setPosition(availableActivities(destinationDay, part).length);
-        }}>{parts.map(part => <option key={part.id} value={part.id}>{part.name}</option>)}</select></label>
-        <label className="hint destination-position">Position<select className="mini-input" aria-label="Position" value={position} onChange={event => setPosition(Number(event.target.value))}>
-          <option value={0}>First</option>
-          {destinationActivities.map((item, index) => <option key={index} value={index + 1}>After {item.label}</option>)}
-        </select></label>
-      </div>
+      {(target.index !== null || target.part !== 'night' || destinationActivities.length > 0) && <>
+        <div className="section-title destination-section-title">3. {target.index === null ? 'Placement' : 'Where does it go?'}</div>
+        <div className="destination-grid">
+          {target.index === null ? <>
+            {target.part !== 'night' && <label className="hint destination-position">Show through<select className="mini-input" aria-label="Show through" value={endPart} onChange={event => setEndPart(event.target.value as PartId)}>
+              {parts.filter(part => partIndex(part.id) >= partIndex(destinationPart)).map(part => <option key={part.id} value={part.id}>{part.id === destinationPart ? `${part.name} only` : `Through ${part.name}`}</option>)}
+            </select></label>}
+            {destinationActivities.length > 0 && <label className="hint destination-position">Place it<select className="mini-input" aria-label="Place it" value={selectedParallel ? `parallel:${selectedParallel}` : `position:${position}`} onChange={event => {
+              const [mode, value] = event.target.value.split(':');
+              if (mode === 'parallel') setParallelWith(value);
+              else { setParallelWith(''); setPosition(Number(value)); }
+            }}>
+              <option value="position:0">Before {destinationActivities[0].label}</option>
+              {destinationActivities.map((item, index) => <option key={`position:${item.id}`} value={`position:${index + 1}`}>After {item.label}</option>)}
+              {parallelOptions.map(group => <option key={`parallel:${group[0].id}`} value={`parallel:${group[0].id}`} disabled={group.length >= maxActivitiesPerSection || sectionLayout(destinationActivities).groupCount >= 1}>At the same time as {sortGroupedActivities(group, members).map(item => item.label).join(' + ')}</option>)}
+            </select></label>}
+          </> : <>
+            <label className="hint">Day<select className="mini-input" aria-label="Day" value={destinationDay} onChange={event => {
+              const day = Number(event.target.value);
+              setDestinationDay(day);
+              setPosition(availableActivities(day, destinationPart).length);
+            }}>{days.map((day, index) => <option key={day} value={index}>{day}</option>)}</select></label>
+            <label className="hint">Starts<select className="mini-input" aria-label="Starts" value={destinationPart} onChange={event => {
+              const part = event.target.value as PartId;
+              const wasSinglePart = endPart === destinationPart;
+              setDestinationPart(part);
+              if (wasSinglePart || partIndex(endPart) < partIndex(part)) setEndPart(part);
+              setPosition(availableActivities(destinationDay, part).length);
+            }}>{parts.map(part => <option key={part.id} value={part.id}>{part.name}</option>)}</select></label>
+            <label className="hint">Ends<select className="mini-input" aria-label="Ends" value={endPart} onChange={event => setEndPart(event.target.value as PartId)}>
+              {parts.filter(part => partIndex(part.id) >= partIndex(destinationPart)).map(part => <option key={part.id} value={part.id}>{part.name}</option>)}
+            </select></label>
+            <label className="hint destination-position">At the same time as<select className="mini-input" value={selectedParallel} onChange={event => setParallelWith(event.target.value)}>
+              <option value="">No other activity</option>
+              {parallelOptions.map(group => <option key={group[0].id} value={group[0].id} disabled={group.length >= maxActivitiesPerSection || sectionLayout(destinationActivities).groupCount >= 1}>{sortGroupedActivities(group, members).map(item => item.label).join(' + ')}</option>)}
+            </select></label>
+            {!selectedParallel && <label className="hint destination-position">Position<select className="mini-input" aria-label="Position" value={position} onChange={event => setPosition(Number(event.target.value))}>
+              <option value={0}>First</option>
+              {destinationActivities.map((item, index) => <option key={index} value={index + 1}>After {item.label}</option>)}
+            </select></label>}
+          </>}
+        </div>
+      </>}
+      {endPart !== destinationPart && <p className="hint">Each visible section gets a card that counts toward its 2 activity groups. Editing any card updates the task.</p>}
     </div>
     <div className="modal-foot">
       {target.index === null ? <span /> : <button className="btn danger" type="button" onClick={onDelete}>Delete</button>}
@@ -616,6 +823,25 @@ function MoveToast({ message, onUndo, onDismiss }: {
   </div>;
 }
 
+function DeleteActivityDialog({ activity, day, visibleParts, selectedPart, onDeleteAll, onDeleteSection, onClose }: {
+  activity: Activity; day: number; visibleParts: PartId[]; selectedPart: PartId;
+  onDeleteAll: () => void; onDeleteSection: (part: PartId) => void; onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { dialog.current?.showModal(); }, []);
+  return <dialog ref={dialog} className="delete-activity-dialog" aria-labelledby="deleteActivityTitle" onClose={onClose}>
+    <div className="modal-head"><h2 id="deleteActivityTitle">Delete {activity.label || 'activity'}?</h2><button type="button" className="xclose" onClick={onClose} aria-label="Close">×</button></div>
+    <div className="modal-body">
+      {visibleParts.length > 1 && <p className="hint">This task appears in more than one part of {days[day]}. Choose which card to remove.</p>}
+      <div className="delete-choice-list">
+        {visibleParts.length > 1 && visibleParts.map(part => <button type="button" className="btn delete-choice" key={part} onClick={() => onDeleteSection(part)}>Delete only from {parts.find(item => item.id === part)?.name}{part === selectedPart ? ' (this card)' : ''}</button>)}
+        <button type="button" className="btn danger delete-choice" onClick={onDeleteAll}>{visibleParts.length > 1 ? 'Delete from all sections' : 'Delete activity'}</button>
+      </div>
+    </div>
+    <div className="modal-foot"><button type="button" className="btn" onClick={onClose}>Cancel</button></div>
+  </dialog>;
+}
+
 function FamilyEditor({ family, week, onSave, onClose, onAddCustomIcon }: {
   family: Family; week: WeekPlan; onSave: (family: Family) => void; onClose: () => void;
   onAddCustomIcon: (icon: Omit<CustomIcon, 'id'>) => CustomIcon;
@@ -624,6 +850,7 @@ function FamilyEditor({ family, week, onSave, onClose, onAddCustomIcon }: {
   const customIcons = useContext(CustomIconsContext);
   const [draft, setDraft] = useState<Family>(() => structuredClone(family));
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<FamilyGroup | null>(null);
   const [query, setQuery] = useState('');
   const [addingCustomIcon, setAddingCustomIcon] = useState(false);
   const selected = draft.members.find(member => member.id === selectedId);
@@ -642,9 +869,14 @@ function FamilyEditor({ family, week, onSave, onClose, onAddCustomIcon }: {
 
   function addMember() {
     const id = newPersonId();
-    setDraft(current => ({ ...current, members: [...current.members, { id, name: '', emoji: '🧑' }] }));
+    setDraft(current => ({ ...current, members: [...current.members, { id, name: '', emoji: '🧑', role: 'child' }] }));
     setSelectedId(id);
+    setSelectedGroup(null);
     setQuery('');
+  }
+
+  function updateGroupIcon(group: FamilyGroup, emoji: string) {
+    setDraft(current => ({ ...current, groupIcons: { ...defaultGroupIcons, ...current.groupIcons, [group]: emoji } }));
   }
 
   return <dialog ref={dialog} aria-labelledby="familyTitle" onClose={onClose}>
@@ -654,14 +886,27 @@ function FamilyEditor({ family, week, onSave, onClose, onAddCustomIcon }: {
       <input id="familyName" className="mini-input" maxLength={40} value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} placeholder={defaultFamily.name} />
       <div className="section-title person-section-title">Family members</div>
       <div className="family-members">{draft.members.map(member => <div className="family-member" key={member.id}>
-        <button type="button" className={`member-emoji ${selectedId === member.id ? 'selected' : ''}`} onClick={() => { setSelectedId(member.id); setQuery(''); }} aria-label={`Change icon for ${member.name || 'new member'}`} aria-pressed={selectedId === member.id}><MemberEmoji emoji={member.emoji} /></button>
+        <button type="button" className={`member-emoji ${selectedId === member.id ? 'selected' : ''}`} onClick={() => { setSelectedId(member.id); setSelectedGroup(null); setQuery(''); }} aria-label={`Change icon for ${member.name || 'new member'}`} aria-pressed={selectedId === member.id}><MemberEmoji emoji={member.emoji} /></button>
         <input className="mini-input" maxLength={25} aria-label="Member name" placeholder="Name" value={member.name} onChange={event => updateMember(member.id, { name: event.target.value })} />
+        <select className="member-role" aria-label={`Role for ${member.name || 'new member'}`} value={memberRole(member)} onChange={event => updateMember(member.id, { role: event.target.value as Family['members'][number]['role'] })}><option value="dad">Dad</option><option value="mum">Mum</option><option value="child">Child</option></select>
         <button type="button" className="remove-member" aria-label={`Remove ${member.name || 'new member'}`} disabled={draft.members.length === 1} onClick={() => {
           setDraft(current => ({ ...current, members: current.members.filter(person => person.id !== member.id) }));
           if (selectedId === member.id) setSelectedId(null);
         }}>Remove</button>
       </div>)}</div>
       <button type="button" className="btn add-member" onClick={addMember}>+ Add member</button>
+      <div className="section-title person-section-title">Family groups</div>
+      <p className="hint">Group pictures appear when everyone in a group joins an activity.</p>
+      <div className="family-groups">{(['family', 'kids', 'parents'] as const).map(group => <button key={group} type="button" className={`person-choice ${selectedGroup === group ? 'selected' : ''}`} aria-pressed={selectedGroup === group} onClick={() => { setSelectedGroup(group); setSelectedId(null); setQuery(''); }}><FamilyContext.Provider value={draft}><GroupFace group={group} /></FamilyContext.Provider>{group === 'kids' ? 'Kids' : group === 'parents' ? 'Parents' : 'Family'}</button>)}</div>
+      {selectedGroup && <section className="member-picker" aria-label={`Choose icon for ${selectedGroup}`}>
+        <div className="section-title">Icon for {selectedGroup}</div>
+        <input className="mini-input icon-search" type="search" aria-label="Search group emojis" placeholder="Search emojis" value={query} onChange={event => setQuery(event.target.value)} />
+        <div className="custom-icon-upload"><button className="btn" type="button" onClick={() => setAddingCustomIcon(true)}>＋ Add custom icon</button></div>
+        <div className="emoji-picker"><button type="button" className={`choice ${(draft.groupIcons?.[selectedGroup] ?? 'auto') === 'auto' ? 'selected' : ''}`} onClick={() => updateGroupIcon(selectedGroup, 'auto')}><FamilyContext.Provider value={draft}><GroupPicture group={selectedGroup} className="big" iconOverride="auto" /></FamilyContext.Provider><span>From members</span></button>
+          {familyIcons.map(item => <button type="button" key={item.id} className={`choice ${draft.groupIcons?.[selectedGroup] === item.id ? 'selected' : ''}`} onClick={() => updateGroupIcon(selectedGroup, item.id)}><IconPicture emoji={item.id} className="big" /><span>{item.name}</span></button>)}
+          {choices.map(entry => <button type="button" key={entry.hexcode} className={`choice ${findOpenMoji(draft.groupIcons?.[selectedGroup] ?? '')?.hexcode === entry.hexcode ? 'selected' : ''}`} onClick={() => updateGroupIcon(selectedGroup, entry.emoji)}><IconPicture emoji={entry.emoji} className="big" /><span>{entry.name}</span></button>)}
+        </div>
+      </section>}
       {selected && <section className="member-picker" aria-label={`Choose emoji for ${selected.name || 'new member'}`}>
         <div className="section-title">Icon for {selected.name || 'new member'}</div>
         <input className="mini-input icon-search" type="search" aria-label="Search member emojis" placeholder="Search emojis (e.g. person, cat)" value={query} onChange={event => setQuery(event.target.value)} />
@@ -675,10 +920,11 @@ function FamilyEditor({ family, week, onSave, onClose, onAddCustomIcon }: {
         {usedBy.length > 0 && <p className="emoji-warning" role="alert">⚠️ This emoji is also used for {usedBy.length === 1 ? `the “${usedBy[0]}” activity` : `${usedBy.length} activities (${usedBy.slice(0, 3).join(', ')}${usedBy.length > 3 ? ', …' : ''})`}. It may be confusing on the planner.</p>}
       </section>}
     </div>
-    <div className="modal-foot"><button className="btn" type="button" onClick={onClose}>Cancel</button><button className="btn primary" type="button" disabled={!draft.name.trim() || draft.members.some(member => !member.name.trim() || !member.emoji.trim())} onClick={() => onSave({ name: draft.name.trim(), members: draft.members.map(member => ({ ...member, name: member.name.trim() })) })}>Save family ✓</button></div>
+    <div className="modal-foot"><button className="btn" type="button" onClick={onClose}>Cancel</button><button className="btn primary" type="button" disabled={!draft.name.trim() || draft.members.some(member => !member.name.trim() || !member.emoji.trim())} onClick={() => onSave({ ...draft, name: draft.name.trim(), members: draft.members.map(member => ({ ...member, name: member.name.trim() })) })}>Save family ✓</button></div>
     {addingCustomIcon && <CustomIconDialog scope="family" onClose={() => setAddingCustomIcon(false)} onSave={icon => {
       const added = onAddCustomIcon(icon);
       if (selectedId) updateMember(selectedId, { emoji: added.id });
+      if (selectedGroup) updateGroupIcon(selectedGroup, added.id);
       setQuery('');
       setAddingCustomIcon(false);
     }} />}
@@ -776,6 +1022,7 @@ export default function App() {
   const [editingBackup, setEditingBackup] = useState(false);
   const [today, setToday] = useState(() => new Date());
   const [target, setTarget] = useState<EditTarget | null>(null);
+  const [deleteRequest, setDeleteRequest] = useState<{ id: string; section: PartId } | null>(null);
   const [editingFamily, setEditingFamily] = useState(false);
   const [undoMove, setUndoMove] = useState<UndoMove | null>(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -795,6 +1042,16 @@ export default function App() {
     setFullscreen(enabled);
   }
 
+  useEffect(() => {
+    if (!fullscreen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || document.querySelector('dialog[open]')) return;
+      changeFullscreen(false);
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [fullscreen]);
+
   useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify(week)); } catch { /* Private browsing can block storage. */ } }, [week]);
   useEffect(() => { try { localStorage.setItem(familyStorageKey, JSON.stringify(family)); } catch { /* Private browsing can block storage. */ } }, [family]);
   useEffect(() => { try { localStorage.setItem(calendarSettingsKey, JSON.stringify(calendarSettings)); } catch { /* Private browsing can block storage. */ } }, [calendarSettings]);
@@ -807,6 +1064,20 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [calendarSettings.start]);
   const displayedDays = useMemo(() => visibleDays(calendarSettings, today), [calendarSettings, today]);
+  const crowdedSections = displayedDays.flatMap(({ index, label }) => parts
+    .filter(part => { const layout = sectionLayout(occupiedSection(week[index], part.id)); return layout.slots > maxActivitiesPerSection || layout.groupCount > 1 || layout.largestGroup > 2; })
+    .map(part => `${label} ${part.name.toLowerCase()}`));
+  const oversizedActivities = displayedDays.flatMap(({ index }) => parts.flatMap(part =>
+    week[index][part.id].filter(activity => participantTokens(activity.who, family.members).length > maxPeoplePerActivity).map(activity =>
+      `${activity.label} (${participantTokens(activity.who, family.members).length} pictures)`)));
+  const canFitPage = crowdedSections.length === 0 && oversizedActivities.length === 0;
+  useEffect(() => {
+    if (!fullscreen || canFitPage) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('fullscreen');
+    window.history.replaceState(null, '', url);
+    setFullscreen(false);
+  }, [fullscreen, canFitPage]);
   useEffect(() => {
     if (!undoMove) return;
     const timeout = window.setTimeout(() => setUndoMove(current => current?.token === undoMove.token ? null : current), 6000);
@@ -844,6 +1115,8 @@ export default function App() {
 
   function commitMove(before: WeekPlan, after: WeekPlan, id: string) {
     if (before === after) return;
+    const error = calendarLimitError(before, after, family.members);
+    if (error) { window.alert(error); return; }
     setWeek(after);
     showMove(before, after, id);
   }
@@ -852,7 +1125,14 @@ export default function App() {
     if (!target) return;
     const next = structuredClone(week);
     if (target.index !== null) next[target.day][target.part].splice(target.index, 1);
-    next[destination.day][destination.part].splice(destination.index ?? next[destination.day][destination.part].length, 0, activity);
+    const destinationItems = next[destination.day][destination.part];
+    if (activity.simultaneousId) {
+      const companion = destinationItems.find(item => item.id === activity.simultaneousId || item.simultaneousId === activity.simultaneousId);
+      if (companion) companion.simultaneousId = activity.simultaneousId;
+    }
+    destinationItems.splice(destination.index ?? destinationItems.length, 0, activity);
+    const error = calendarLimitError(week, next, family.members);
+    if (error) { window.alert(error); return; }
     setWeek(next);
     if (target.index !== null) showMove(week, next, activity.id);
     else setUndoMove(null);
@@ -882,11 +1162,11 @@ export default function App() {
 
   function deleteCustomIcon(icon: CustomIcon): void {
     const inUse = icon.scope === 'family'
-      ? family.members.filter(member => member.emoji === icon.id).length
+      ? family.members.filter(member => member.emoji === icon.id).length + Object.values(family.groupIcons ?? {}).filter(value => value === icon.id).length
       : week.reduce((total, day) => total + parts.reduce((count, part) => count + day[part.id].filter(activity => activity.icon === icon.id).length, 0), 0);
     const replacement = icon.scope === 'family' ? '🧑' : '🛝';
     const message = inUse
-      ? `Delete “${icon.name}”? It is used ${inUse} ${inUse === 1 ? 'time' : 'times'} on your planner. Those ${icon.scope === 'family' ? 'people' : 'activities'} will show ${replacement} instead.`
+      ? `Delete “${icon.name}”? It is used ${inUse} ${inUse === 1 ? 'time' : 'times'} on your planner. Affected ${icon.scope === 'family' ? 'people and groups' : 'activities'} will use their default icon instead.`
       : `Delete “${icon.name}” from your custom icons?`;
     if (!window.confirm(message)) return;
     try {
@@ -896,7 +1176,8 @@ export default function App() {
     }
     setCustomIcons(current => current.filter(item => item.id !== icon.id));
     if (icon.scope === 'family') {
-      setFamily(current => ({ ...current, members: current.members.map(member => member.emoji === icon.id ? { ...member, emoji: replacement } : member) }));
+      setFamily(current => ({ ...current, members: current.members.map(member => member.emoji === icon.id ? { ...member, emoji: replacement } : member),
+        groupIcons: Object.fromEntries((['family', 'kids', 'parents'] as const).map(group => [group, current.groupIcons?.[group] === icon.id ? 'auto' : current.groupIcons?.[group] ?? 'auto'])) as Record<FamilyGroup, string> }));
     } else {
       setWeek(current => {
         const next = structuredClone(current);
@@ -908,24 +1189,38 @@ export default function App() {
     }
   }
 
-  function deleteActivityById(activity: Activity) {
-    if (!window.confirm(`Delete “${activity.label || 'this activity'}” from the calendar?`)) return;
+  function requestDeleteActivity(activity: Activity, section: PartId) {
+    setDeleteRequest({ id: activity.id, section });
+  }
+
+  function deleteActivityEverywhere() {
+    if (!deleteRequest) return;
+    const position = findActivity(week, deleteRequest.id);
+    if (!position) { setDeleteRequest(null); return; }
+    const next = structuredClone(week);
+    next[position.day][position.part].splice(position.index, 1);
+    setWeek(next);
     setUndoMove(null);
-    setWeek(current => {
-      const position = findActivity(current, activity.id);
-      if (!position) return current;
-      const next = structuredClone(current);
-      next[position.day][position.part].splice(position.index, 1);
-      return next;
-    });
     setTarget(null);
+    setDeleteRequest(null);
+  }
+
+  function deleteActivitySection(section: PartId) {
+    if (!deleteRequest) return;
+    const next = removeActivityFromSection(week, deleteRequest.id, section);
+    const error = calendarLimitError(week, next, family.members);
+    if (error) { window.alert(error); return; }
+    setWeek(next);
+    setUndoMove(null);
+    setTarget(null);
+    setDeleteRequest(null);
   }
 
   function deleteActivity() {
     if (!target || target.index === null) return;
     const activity = week[target.day][target.part][target.index];
     if (!activity) return;
-    deleteActivityById(activity);
+    requestDeleteActivity(activity, target.part);
   }
 
   function reset() {
@@ -970,19 +1265,23 @@ export default function App() {
   const initialActivity = target && (target.index === null
     ? { id: newActivityId(), icon: '🛝', label: 'Playground', who: family.members[0] ? [family.members[0].id] : [] }
     : week[target.day][target.part][target.index]);
+  const deletePosition = deleteRequest ? findActivity(week, deleteRequest.id) : undefined;
+  const activityToDelete = deletePosition && week[deletePosition.day][deletePosition.part][deletePosition.index];
 
-  return <FamilyContext.Provider value={family}><CustomIconsContext.Provider value={customIcons}><main className={`shell ${showBackToTop ? 'with-back-to-top' : ''} ${fullscreen ? 'fullscreen-calendar' : ''}`}>
+  return <FamilyContext.Provider value={family}><CustomIconsContext.Provider value={customIcons}><main className={`shell ${showBackToTop ? 'with-back-to-top' : ''} ${fullscreen && canFitPage ? 'fullscreen-calendar' : ''}`}>
     <header className="top">
       <div className="titleline"><img className="site-logo" src={`${import.meta.env.BASE_URL}logo/little-week.png`} alt="" /><div><h1>{family.name}</h1><p className="sub">The picture shows <strong>what</strong> we're doing. The little faces show <strong>who</strong> is doing it.</p></div></div>
-      <div className="actions"><button className="btn" type="button" onClick={() => setEditingFamily(true)}>👨‍👩‍👧‍👦 Edit family</button><button className="btn" type="button" onClick={() => setEditingCalendar(true)}>📅 Calendar view: {calendarSettings.start === 'today' ? 'Today' : calendarSettings.start === 'sunday' ? 'Sunday' : 'Monday'}</button><button className="btn" type="button" onClick={() => setEditingCustomIcons(true)}>🎨 Custom icons</button><button className="btn" type="button" onClick={() => setEditingBackup(true)}>💾 Backup</button><button className="btn" type="button" onClick={reset}>↺ Reset example</button><button className="btn" type="button" onClick={() => changeFullscreen(true)}>⛶ Full screen</button><button className="btn primary" type="button" onClick={() => window.print()}>🖨️ Print A4</button></div>
+      <div className="actions"><button className="btn" type="button" onClick={() => setEditingFamily(true)}>👨‍👩‍👧‍👦 Edit family</button><button className="btn" type="button" onClick={() => setEditingCalendar(true)}>📅 Calendar view: {calendarSettings.start === 'today' ? 'Today' : calendarSettings.start === 'sunday' ? 'Sunday' : 'Monday'}</button><button className="btn" type="button" onClick={() => setEditingCustomIcons(true)}>🎨 Custom icons</button><button className="btn" type="button" onClick={() => setEditingBackup(true)}>💾 Backup</button><button className="btn" type="button" onClick={reset}>↺ Reset example</button><button className="btn" type="button" disabled={!canFitPage} onClick={() => changeFullscreen(true)}>⛶ Full screen</button><button className="btn primary" type="button" disabled={!canFitPage} onClick={() => window.print()}>🖨️ Print A4</button></div>
     </header>
     {fullscreen && <div className="fullscreen-toolbar"><button className="btn" type="button" onClick={() => changeFullscreen(false)}>✕ Exit full screen</button></div>}
     <Legend />
-    <div className="intro">Tap an activity to edit it. Drag it to another spot to move it (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
-    <Calendar week={week} displayedDays={displayedDays} onEdit={setTarget} onDelete={deleteActivityById} onCommit={commitMove} />
+    {!canFitPage && <p className="calendar-limit-warning" role="status">Full screen and one-page print are available after you simplify the saved activities. {crowdedSections.length > 0 && `Review ${crowdedSections.join(', ')}: each section holds up to 2 activities or groups, with at most 1 group of 2. `}{oversizedActivities.length > 0 && `These activities show more than 4 pictures: ${oversizedActivities.join('; ')}. Deselect people or complete a group until 4 pictures remain in each. `}Your activities are still saved below.</p>}
+    <div className="intro">Tap an activity to edit it. Drag onto the highlighted area to group activities, or above or below to move them apart (touch and hold on mobile). Tap <strong>+</strong> to add another activity. No exact times needed.</div>
+    <Calendar week={week} displayedDays={displayedDays} onEdit={setTarget} onDelete={requestDeleteActivity} onCommit={commitMove} />
     <p className="smallnote">Each time-of-day row fits its activities · Example activities only · Changes save on this device · A4 landscape print · Icons by <a href="https://openmoji.org/">OpenMoji</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>)</p>
     {showBackToTop && <button className="back-to-top" type="button" aria-label="Back to top" title="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })}><span aria-hidden="true">↑</span></button>}
     {target && initialActivity && <ActivityEditor target={target} activity={initialActivity} week={week} onSave={saveActivity} onDelete={deleteActivity} onClose={() => setTarget(null)} onAddCustomIcon={addCustomIcon} />}
+    {deleteRequest && deletePosition && activityToDelete && <DeleteActivityDialog activity={activityToDelete} day={deletePosition.day} visibleParts={activityVisibleParts(deletePosition.part, activityToDelete)} selectedPart={deleteRequest.section} onDeleteAll={deleteActivityEverywhere} onDeleteSection={deleteActivitySection} onClose={() => setDeleteRequest(null)} />}
     {editingFamily && <FamilyEditor family={family} week={week} onSave={saveFamily} onClose={() => setEditingFamily(false)} onAddCustomIcon={addCustomIcon} />}
     {editingCalendar && <CalendarSettingsDialog settings={calendarSettings} onSave={settings => { setToday(new Date()); setCalendarSettings(settings); setEditingCalendar(false); }} onClose={() => setEditingCalendar(false)} />}
     {editingCustomIcons && <CustomIconsManager icons={customIcons} onAdd={addCustomIcon} onUpdate={updateCustomIcon} onDelete={deleteCustomIcon} onClose={() => setEditingCustomIcons(false)} />}
