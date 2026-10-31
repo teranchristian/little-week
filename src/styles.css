@@ -944,3 +944,41 @@ button:disabled{cursor:default;opacity:.55}
   --stack-gap:var(--activity-face-gap);
 }
 .shell .calendar .part .simultaneous-cards > .activity:has(.group-face){--stack-face-height:var(--member-group-size)}
+
+/* One day-level Add control replaces the section buttons. */
+.activity.linked-hover{border-color:#3c9a7c;background:#fbfffb}
+.delete-choice-list{display:flex;flex-direction:column;gap:9px;margin-top:12px}
+.delete-choice-list .delete-choice{justify-content:flex-start;min-height:44px;text-align:left}
+.day-add-desktop,.day-add-mobile{display:none}
+@media screen and (min-width:901px){
+  .shell:not(.fullscreen-calendar) .day-add-desktop{display:grid;place-items:center;position:fixed;z-index:8;width:35px;height:35px;border:1px solid #3c8c75;border-radius:50%;background:#247a62;color:#fff;font-size:27px;line-height:1;box-shadow:0 2px 8px #1c564b36;transition:opacity .15s ease,transform .15s ease}
+  .shell:not(.fullscreen-calendar) .day-add-desktop.is-hidden{opacity:0;transform:translateY(12px);pointer-events:none}
+  .shell:not(.fullscreen-calendar) .day-add-desktop:hover{background:#195e4c}
+}
+@media screen and (max-width:900px){
+  .shell{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+  .day-add-mobile{display:flex;position:fixed;left:16px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:10;align-items:center;justify-content:center;gap:5px;min-width:88px;height:52px;padding:0 14px;border:0;border-radius:999px;background:#247a62;color:#fff;font-size:27px;font-weight:750;line-height:1;box-shadow:0 4px 14px #183b3444;transition:opacity .15s ease,transform .15s ease}
+  .day-add-mobile span{font-size:12px;letter-spacing:.3px}
+  .day-add-mobile.is-hidden{opacity:0;transform:translateY(12px);pointer-events:none}
+  .day-add-mobile:hover{background:#195e4c}
+  .fullscreen-calendar .day-add-mobile{display:none}
+}
+@media print{.day-add-desktop,.day-add-mobile{display:none!important}}
+
+@media screen and (min-width:901px){
+  .shell:not(.fullscreen-calendar) .calendar{row-gap:2px;padding-bottom:43px}
+  .shell:not(.fullscreen-calendar) .part{padding:4px}
+  .shell:not(.fullscreen-calendar) .part .activities{gap:4px}
+  .shell:not(.fullscreen-calendar) .simultaneous-group:not(.group-dragging){padding:0}
+  .shell:not(.fullscreen-calendar) .simultaneous-cards{gap:4px}
+}
+@media screen{
+  .fullscreen-calendar .part .activities{gap:4px}
+  .fullscreen-calendar .simultaneous-group:not(.group-dragging){padding:0}
+  .fullscreen-calendar .simultaneous-cards{gap:4px}
+}
+@media print{
+  .part .activities{gap:1mm}
+  .simultaneous-group{padding:0}
+  .simultaneous-cards{gap:1mm}
+}

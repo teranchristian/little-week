@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { calendarLimitError, sectionLayout, printActivityWeight, findActivity, groupActivity, moveActivity, sortGroupedActivities, type WeekPlan } from '../src/planner.ts';
+import { activityVisibleParts, calendarLimitError, continuingActivities, occupiedSection, removeActivityFromSection, sectionLayout, printActivityWeight, findActivity, groupActivity, moveActivity, sortGroupedActivities, type WeekPlan } from '../src/planner.ts';
 
 function week(): WeekPlan {
   const item = (id: string) => ({ id, icon: '🏠', label: id, who: [] });
@@ -74,4 +74,56 @@ test('four faces fit; a fifth is rejected while older entries can be edited', ()
   const edited = structuredClone(five);
   edited[0].morning[0].label = 'edited';
   assert.equal(calendarLimitError(five, edited), null);
+});
+
+test('a spanning activity occupies each covered part and blocks a full destination', () => {
+  const initial = week();
+  initial[0].morning = [initial[0].morning[0]];
+  initial[0].afternoon = [{ id: 'd', icon: '🏠', label: 'd', who: [] }, { id: 'e', icon: '🏠', label: 'e', who: [] }];
+  const span = structuredClone(initial);
+  span[0].morning[0].endPart = 'night';
+  assert.deepEqual(continuingActivities(span[0], 'afternoon').map(item => item.id), ['a']);
+  assert.deepEqual(continuingActivities(span[0], 'night').map(item => item.id), ['a']);
+  assert.deepEqual(occupiedSection(span[0], 'afternoon').map(item => item.id), ['a', 'd', 'e']);
+  assert.match(calendarLimitError(initial, span)!, /Only 2 activities or groups/);
+  span[0].afternoon.pop();
+  assert.equal(calendarLimitError(initial, span), null);
+});
+
+test('only the members of a group that continue occupy the next part', () => {
+  const initial = week();
+  initial[0].morning = initial[0].morning.slice(0, 2);
+  const grouped = groupActivity(initial, 'a', 'b');
+  grouped[0].morning[0].endPart = 'afternoon';
+  assert.deepEqual(continuingActivities(grouped[0], 'afternoon').map(item => item.id), ['b']);
+  assert.equal(sectionLayout(occupiedSection(grouped[0], 'afternoon')).slots, 1);
+  grouped[0].morning[1].endPart = 'afternoon';
+  assert.deepEqual(continuingActivities(grouped[0], 'afternoon').map(item => item.id), ['b', 'a']);
+  assert.deepEqual(sectionLayout(occupiedSection(grouped[0], 'afternoon')), { slots: 1, groupCount: 1, largestGroup: 2 });
+});
+
+test('removing one linked section keeps the other cards', () => {
+  const initial = week();
+  initial[0].morning = [{ id: 'a', icon: '🏠', label: 'a', who: [], endPart: 'night' }];
+  const withoutAfternoon = removeActivityFromSection(initial, 'a', 'afternoon');
+  assert.deepEqual(activityVisibleParts('morning', withoutAfternoon[0].morning[0]), ['morning', 'night']);
+  assert.deepEqual(occupiedSection(withoutAfternoon[0], 'afternoon'), []);
+  assert.deepEqual(occupiedSection(withoutAfternoon[0], 'night').map(item => item.id), ['a']);
+  const withoutMorning = removeActivityFromSection(initial, 'a', 'morning');
+  assert.deepEqual(withoutMorning[0].morning, []);
+  assert.deepEqual(activityVisibleParts('afternoon', withoutMorning[0].afternoon[0]), ['afternoon', 'night']);
+  const withoutNight = removeActivityFromSection(initial, 'a', 'night');
+  assert.deepEqual(activityVisibleParts('morning', withoutNight[0].morning[0]), ['morning', 'afternoon']);
+  assert.equal(initial[0].morning[0].endPart, 'night');
+});
+
+test('removing the first section of a grouped span preserves the later group', () => {
+  const initial = week();
+  initial[0].morning = initial[0].morning.slice(0, 2);
+  const grouped = groupActivity(initial, 'a', 'b');
+  grouped[0].morning.forEach(item => { item.endPart = 'afternoon'; });
+  const result = removeActivityFromSection(grouped, 'a', 'morning');
+  assert.deepEqual(result[0].morning.map(item => item.id), ['b']);
+  assert.deepEqual(result[0].afternoon.map(item => item.id), ['a']);
+  assert.deepEqual(sectionLayout(occupiedSection(result[0], 'afternoon')), { slots: 1, groupCount: 1, largestGroup: 2 });
 });

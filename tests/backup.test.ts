@@ -8,6 +8,8 @@ const icon = { id: 'custom:picture', name: 'Photo', tag: 'photo', scope: 'activi
 test('backup includes custom images and restores all planner fields', () => {
   const week = sampleWeekForFamily(defaultFamily);
   week[0].morning[0].icon = icon.id;
+  week[0].morning[0].endPart = 'night';
+  week[0].morning[0].excludedParts = ['afternoon'];
   const backup = createBackup(defaultFamily, week, { start: 'today', daysToShow: 3 }, [icon]);
   assert.deepEqual(parseBackup(JSON.stringify(backup)), backup);
 });
@@ -20,6 +22,12 @@ test('import rejects invalid content before changing storage', () => {
   const week = structuredClone(backup.week);
   week[0].morning[0].icon = 'custom:missing';
   assert.throws(() => parseBackup(JSON.stringify({ ...backup, week })), /missing activity icons/);
+  week[0].morning[0].icon = '🏫';
+  week[0].afternoon[0].endPart = 'morning';
+  assert.throws(() => parseBackup(JSON.stringify({ ...backup, week })), /invalid activities/);
+  week[0].afternoon[0].endPart = 'night';
+  week[0].afternoon[0].excludedParts = ['morning'];
+  assert.throws(() => parseBackup(JSON.stringify({ ...backup, week })), /invalid activities/);
 });
 
 test('failed import restores existing browser data', () => {

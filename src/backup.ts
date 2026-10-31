@@ -1,6 +1,6 @@
 import { calendarSettingsKey, type CalendarSettings } from './calendarView.ts';
 import { customIconsStorageKey, type CustomIcon } from './customIcons.ts';
-import { familyStorageKey, parts, storageKey, type Family, type WeekPlan } from './planner.ts';
+import { familyStorageKey, partIndex, parts, storageKey, type Family, type WeekPlan } from './planner.ts';
 
 export interface PlannerBackup {
   format: 'little-week-backup';
@@ -66,6 +66,14 @@ export function parseBackup(text: string): PlannerBackup {
       typeof activity.id === 'string' && !!activity.id && typeof activity.icon === 'string' &&
       typeof activity.label === 'string' && Array.isArray(activity.who) &&
       activity.who.every((id: unknown) => typeof id === 'string' && memberIds.has(id)) &&
+      (activity.endPart === undefined || (parts.some(candidate => candidate.id === activity.endPart) &&
+        partIndex(activity.endPart as typeof part.id) >= partIndex(part.id))) &&
+      (activity.excludedParts === undefined || (Array.isArray(activity.excludedParts) &&
+        new Set(activity.excludedParts).size === activity.excludedParts.length &&
+        activity.excludedParts.every((excluded: unknown) => typeof excluded === 'string' &&
+          parts.some(candidate => candidate.id === excluded) && activity.endPart !== undefined &&
+          partIndex(excluded as typeof part.id) > partIndex(part.id) &&
+          partIndex(excluded as typeof part.id) < partIndex(activity.endPart as typeof part.id)))) &&
       (!activity.icon.startsWith('custom:') || customIcons.some(icon => icon.id === activity.icon && icon.scope === 'activity')));
   }))) {
     throw new Error('The backup has invalid activities or missing activity icons.');
