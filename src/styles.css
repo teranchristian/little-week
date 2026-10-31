@@ -966,7 +966,7 @@ button:disabled{cursor:default;opacity:.55}
 @media print{.day-add-desktop,.day-add-mobile{display:none!important}}
 
 @media screen and (min-width:901px){
-  .shell:not(.fullscreen-calendar) .calendar{row-gap:2px;padding-bottom:43px}
+  .shell:not(.fullscreen-calendar) .calendar{row-gap:2px}
   .shell:not(.fullscreen-calendar) .part{padding:4px}
   .shell:not(.fullscreen-calendar) .part .activities{gap:4px}
   .shell:not(.fullscreen-calendar) .simultaneous-group:not(.group-dragging){padding:0}
@@ -981,4 +981,63 @@ button:disabled{cursor:default;opacity:.55}
   .part .activities{gap:1mm}
   .simultaneous-group{padding:0}
   .simultaneous-cards{gap:1mm}
+}
+
+/* A narrow grouped card can keep three or four people on one overlapping row. */
+@media screen, print{
+  .calendar.many-days .activities:has(> .activity) .simultaneous-cards > .activity:has(.people > .face:nth-child(3)){
+    --activity-face-size:min(40px, 45cqw);
+    --member-group-size:var(--activity-face-size);
+  }
+  .calendar.many-days .activities:has(> .activity) .simultaneous-cards > .activity:has(.people > .face:nth-child(3)) .people{
+    flex-direction:row;flex-wrap:nowrap;align-items:center;width:100%;height:auto;gap:0;
+  }
+  .calendar.many-days .activities:has(> .activity) .simultaneous-cards > .activity:has(.people > .face:nth-child(3)) .people > .face + .face{
+    margin-left:calc(-1 * max(14px, (var(--people-count) * var(--activity-face-size) - 100cqw + 8px) / (var(--people-count) - 1)));
+  }
+  .calendar.many-days .activities:has(> .activity) .simultaneous-cards > .activity:has(.people > .face:nth-child(3)) .activity-open::after{
+    min-height:0;
+  }
+  .calendar.many-days .activities:has(> .activity) .simultaneous-cards > .activity:has(.people > .group-face):has(.people > .face:not(.group-face)):has(.people > .face:nth-child(2):last-child){
+    --activity-face-size:min(45px, 50cqw);
+    --member-group-size:min(50px, 55cqw);
+  }
+  .calendar.many-days .activities:has(> .activity) .simultaneous-cards > .activity:has(.people > .group-face):has(.people > .face:not(.group-face)):has(.people > .face:nth-child(2):last-child) .people{
+    flex-direction:row;flex-wrap:nowrap;align-items:center;width:100%;height:auto;gap:0;
+  }
+  .calendar.many-days .activities:has(> .activity) .simultaneous-cards > .activity:has(.people > .group-face):has(.people > .face:not(.group-face)):has(.people > .face:nth-child(2):last-child) .people > .face + .face{
+    margin-left:calc(-1 * max(14px, var(--member-group-size) + var(--activity-face-size) - 100cqw + 8px));
+  }
+  .calendar.many-days .activities:has(> .activity) .simultaneous-cards > .activity:has(.people > .group-face):has(.people > .face:not(.group-face)):has(.people > .face:nth-child(2):last-child) .activity-open::after{
+    min-height:0;
+  }
+}
+
+@media screen{
+  .fullscreen-calendar .calendar.many-days .activities:has(> .activity) .simultaneous-cards > .activity:has(.people > .face:nth-child(3)),
+  .fullscreen-calendar .calendar.many-days .activities:has(> .activity) .simultaneous-cards > .activity:has(.people > .group-face):has(.people > .face:not(.group-face)):has(.people > .face:nth-child(2):last-child){
+    --activity-face-size:min(40px, 45cqw);
+    --member-group-size:min(45px, 50cqw);
+  }
+}
+@media print{
+  .calendar.many-days .activities:has(> .activity) .simultaneous-cards > .activity:has(.people > .face:nth-child(3)),
+  .calendar.many-days .activities:has(> .activity) .simultaneous-cards > .activity:has(.people > .group-face):has(.people > .face:not(.group-face)):has(.people > .face:nth-child(2):last-child){
+    --activity-face-size:min(40px, 45cqw);
+    --member-group-size:min(45px, 50cqw);
+  }
+}
+
+@media screen{
+  .fullscreen-calendar .calendar.many-days{
+    grid-template-columns:48px repeat(var(--calendar-columns,7),minmax(0,1fr));
+  }
+  .fullscreen-calendar .calendar.many-days .day-part-label > span:not(.day-part-icon){display:none}
+}
+@media print{
+  .calendar.many-days{
+    grid-template-columns:repeat(var(--calendar-columns,7),minmax(0,1fr));
+  }
+  .calendar.many-days .calendar-corner,
+  .calendar.many-days .day-part-label{display:none}
 }

@@ -267,7 +267,7 @@ function Calendar({ week, displayedDays, isScrolling, onEdit, onDelete, onCommit
         const visibleHorizontally = left >= scrollRect.left + 4 && left + 35 <= scrollRect.right - 4;
         button.style.visibility = visibleVertically && visibleHorizontally ? 'visible' : 'hidden';
         button.style.left = `${left}px`;
-        button.style.top = `${Math.max(calendarRect.top + 8, Math.min(window.innerHeight - 60, calendarRect.bottom - 43))}px`;
+        button.style.top = `${Math.max(calendarRect.top + 8, Math.min(window.innerHeight - 60, column.bottom - 43))}px`;
       }
     };
     const schedulePosition = () => {
@@ -496,7 +496,7 @@ function Calendar({ week, displayedDays, isScrolling, onEdit, onDelete, onCommit
     <nav ref={dayNav} className="day-nav" aria-label="Jump to day">
       {displayedDays.map(({ index, label, date }) => <button key={index} type="button" className={activeDay === index ? 'active' : ''} aria-current={activeDay === index ? 'location' : undefined} onClick={() => document.getElementById(`day-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{label}{date && <span className="nav-date">{date.getDate()}</span>}</button>)}
     </nav>
-    <div className={`calendar ${displayedDays.length < 7 ? 'short-view' : ''}`} style={{ '--calendar-columns': displayedDays.length, ...printRowHeights, ...fullscreenRowWeights } as CSSProperties}>
+    <div className={`calendar ${displayedDays.length < 7 ? 'short-view' : ''} ${displayedDays.length > 3 ? 'many-days' : ''}`} style={{ '--calendar-columns': displayedDays.length, ...printRowHeights, ...fullscreenRowWeights } as CSSProperties}>
     <div className="calendar-corner" aria-hidden="true" />
     {parts.map(part => <div className={`day-part-label ${part.id}`} key={part.id} aria-hidden="true"><span className="day-part-icon">{part.emoji}</span><span>{part.name}</span></div>)}
     <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={dragStart} onDragMove={updatePreview} onDragOver={updatePreview} onDragEnd={dragEnd} onDragCancel={clearDrag}>
